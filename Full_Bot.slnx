@@ -1,0 +1,10 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="Full_Bot.csproj" Id="47b4d5b5-3e58-4ac3-b5f5-58a5bea3d080">
+    <Platform Solution="*|x86" Project="x86" />
+    <Platform Solution="Debug|Any CPU" Project="x86" />
+  </Project>
+</Solution>
