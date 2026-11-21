@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
@@ -25,6 +25,24 @@ namespace Full_Bot
         public uint LeaderPlayerId { get; set; } = 0;
         public float MaxLeaderDistance { get; set; } = 100f;
 
+        // Metas de combate, defesa e área/voo
+        public bool AutoMobPull { get; set; } = false;
+        public float MobPullRadius { get; set; } = 22f;
+
+        public bool AutoDefend { get; set; } = true;
+        public float AggroDetectRadius { get; set; } = 16f;
+
+        public bool HasAreaCenter { get; set; } = false;
+        public float AreaCenterX { get; set; } = 0f;
+        public float AreaCenterY { get; set; } = 0f;
+        public float AreaCenterZ { get; set; } = 0f;
+        public float AreaRadius { get; set; } = 45f;
+
+        public bool UseFlightForLongDistance { get; set; } = true;
+        public float FlyMinDistance { get; set; } = 60f;
+        public int FlyAltitude { get; set; } = 25;
+
+        // Loot, buffs, skills e mobs
         public LootFilterMode LootMode { get; set; } = LootFilterMode.SomenteMoedas;
         public float LootRadius { get; set; } = 6.0f;
         public List<uint> CollectItemIds { get; set; } = new List<uint>();
@@ -61,6 +79,18 @@ namespace Full_Bot
                     HelpAlliesInQuest = true,
                     Role = "Solo",
                     MaxLeaderDistance = 100f,
+                    AutoMobPull = false,
+                    MobPullRadius = 22f,
+                    AutoDefend = true,
+                    AggroDetectRadius = 16f,
+                    HasAreaCenter = false,
+                    AreaCenterX = 0f,
+                    AreaCenterY = 0f,
+                    AreaCenterZ = 0f,
+                    AreaRadius = 45f,
+                    UseFlightForLongDistance = true,
+                    FlyMinDistance = 60f,
+                    FlyAltitude = 25,
                     LootMode = LootFilterMode.SomenteMoedas,
                     LootRadius = 6.0f,
                     CollectItemIds = new List<uint>(),

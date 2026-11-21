@@ -15,6 +15,7 @@ namespace Full_Bot
         {
             InitializeComponent();
             SyncMultiClients();
+            BotHub.PulseAll();
             RefreshOverviewAndPanels();
         }
 
@@ -23,6 +24,7 @@ namespace Full_Bot
             try
             {
                 SyncMultiClients();
+                BotHub.PulseAll();
                 RefreshOverviewAndPanels();
             }
             catch
@@ -37,10 +39,9 @@ namespace Full_Bot
             var snapshot = BotHub.GetSnapshot();
             var activePids = new HashSet<int>(
                 snapshot
-                    .Where(b => b.Memory != null && b.Memory.Process != null && !b.Memory.Process.HasExited)
+                    .Where(b => b?.Memory?.Process != null && !b.Memory.Process.HasExited)
                     .Select(b => b.Memory.Process.Id));
 
-            // Remove abas de processos que fecharam
             var closedPids = _clientTabs.Keys.Where(pid => !activePids.Contains(pid)).ToList();
             foreach (int pid in closedPids)
             {
@@ -54,9 +55,9 @@ namespace Full_Bot
                 _clientPanels.Remove(pid);
             }
 
-            // Adiciona abas novas para cada cliente conectado
             foreach (var bot in snapshot)
             {
+                if (bot?.Memory?.Process == null || bot.Player == null) continue;
                 int pid = bot.Memory.Process.Id;
                 if (_clientTabs.ContainsKey(pid)) continue;
 
@@ -85,13 +86,13 @@ namespace Full_Bot
         {
             var snapshot = BotHub.GetSnapshot();
 
-            // Atualiza gridOverview na aba Status preservando seleção e rolagem
             int firstRow = gridOverview.FirstDisplayedScrollingRowIndex;
             int selectedRow = gridOverview.CurrentRow != null ? gridOverview.CurrentRow.Index : -1;
 
             gridOverview.Rows.Clear();
             foreach (var bot in snapshot)
             {
+                if (bot?.Memory?.Process == null) continue;
                 var p = bot.Player;
                 string posText = p != null
                     ? $"{PlayerCore.ToDisplayX(p.X):F0}, {PlayerCore.ToDisplayZ(p.Z):F0}"
@@ -112,14 +113,13 @@ namespace Full_Bot
             if (selectedRow >= 0 && selectedRow < gridOverview.Rows.Count)
                 gridOverview.Rows[selectedRow].Selected = true;
 
-            // Atualiza títulos das abas e dispara UpdateTick de cada ClientPanel
             foreach (var kv in _clientPanels)
             {
                 int pid = kv.Key;
                 var panel = kv.Value;
-                var bot = panel.Bot;
+                var bot = panel?.Bot;
 
-                if (_clientTabs.TryGetValue(pid, out var tab) && bot != null && bot.Player != null)
+                if (_clientTabs.TryGetValue(pid, out var tab) && bot?.Player != null)
                 {
                     string charName = bot.Player.Name;
                     string desiredTitle = string.IsNullOrWhiteSpace(charName) || charName.StartsWith("PID:")
@@ -130,7 +130,7 @@ namespace Full_Bot
                         tab.Text = desiredTitle;
                 }
 
-                panel.UpdateTick();
+                panel?.UpdateTick();
             }
         }
 

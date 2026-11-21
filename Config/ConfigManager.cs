@@ -97,7 +97,7 @@ namespace Full_Bot
         [JsonPropertyName("children")]
         public Dictionary<string, OffsetNode> Children { get; set; } = new Dictionary<string, OffsetNode>(StringComparer.OrdinalIgnoreCase);
 
-        
+
 
         public uint[] GetOffsetsUInt()
         {

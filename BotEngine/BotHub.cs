@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Windows.Forms;
 
 namespace Full_Bot
 {
@@ -39,8 +40,7 @@ namespace Full_Bot
                         if (proc.HasExited) continue;
 
                         bool alreadyAttached = _bots.Any(b =>
-                            b.Memory != null &&
-                            b.Memory.Process != null &&
+                            b?.Memory?.Process != null &&
                             !b.Memory.Process.HasExited &&
                             b.Memory.Process.Id == proc.Id);
 
@@ -80,13 +80,18 @@ namespace Full_Bot
             {
                 try
                 {
-                    bot.Pulse();
+                    bot?.Pulse();
                 }
                 catch
                 {
                     // Evita que erro em um client derrube os outros
                 }
             }
+        }
+
+        public static ToolStrip CreateDefaultModulesStrip(Func<uint> getSelectedPlayerId = null, IWin32Window owner = null)
+        {
+            return BotHubModulesMenu.CreateModulesToolStrip(getSelectedPlayerId, owner);
         }
 
         public static BotController FindBotByPlayerId(uint playerId)
@@ -98,7 +103,7 @@ namespace Full_Bot
             for (int i = 0; i < snapshot.Count; i++)
             {
                 var bot = snapshot[i];
-                if (bot != null && bot.Player != null && bot.Player.Id == playerId)
+                if (bot?.Player != null && bot.Player.Id == playerId)
                     return bot;
             }
 
@@ -111,7 +116,7 @@ namespace Full_Bot
             {
                 foreach (var bot in _bots)
                 {
-                    try { bot.Dispose(); }
+                    try { bot?.Dispose(); }
                     catch { }
                 }
                 _bots.Clear();
@@ -123,10 +128,10 @@ namespace Full_Bot
             for (int i = _bots.Count - 1; i >= 0; i--)
             {
                 var b = _bots[i];
-                bool exited = b.Memory == null || b.Memory.Process == null || b.Memory.Process.HasExited;
+                bool exited = b?.Memory?.Process == null || b.Memory.Process.HasExited;
                 if (exited)
                 {
-                    try { b.Dispose(); }
+                    try { b?.Dispose(); }
                     catch { }
                     _bots.RemoveAt(i);
                 }

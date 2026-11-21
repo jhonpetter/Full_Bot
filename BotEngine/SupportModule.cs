@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -28,7 +28,7 @@ namespace Full_Bot
         public bool IsLeader { get; set; } = false;
         public uint LeaderPlayerId { get; set; } = 0;
 
-        public float MaxLeaderDistance { get; set; } = 100f; // Raio máximo para manter proximidade (não fica seguindo colado)
+        public float MaxLeaderDistance { get; set; } = 100f;
         public float WaitGroupRadius { get; set; } = 25f;
 
         public List<AutoBuffRule> BuffRules { get; } = new List<AutoBuffRule>();
@@ -64,13 +64,11 @@ namespace Full_Bot
             return false;
         }
 
-        // Convida automaticamente IDs da lista que estejam na lista de Amigos e ainda não estejam na Party
         public bool TryAutoInviteFriends(out string status)
         {
             status = string.Empty;
             if (!AutoInviteFriends || AutoInviteFriendIds.Count == 0) return false;
 
-            // Evita spam de convite (checa a cada 5 segundos)
             if ((DateTime.Now - _lastInviteCheck).TotalSeconds < 5) return false;
             _lastInviteCheck = DateTime.Now;
 
@@ -81,7 +79,6 @@ namespace Full_Bot
             {
                 if (targetId == 0 || targetId == _player.Id) continue;
 
-                // Só convida se estiver na lista de amigos E ainda não estiver no grupo
                 if (friendIds.Contains(targetId) && !partyMemberIds.Contains(targetId))
                 {
                     _party.Invite(targetId);
@@ -92,13 +89,11 @@ namespace Full_Bot
             return false;
         }
 
-        // Mantém proximidade máxima do líder (só se move se passar do raio; dentro do raio age livremente)
         public bool TryMaintainProximityToLeader(out string status)
         {
             status = string.Empty;
             if (IsLeader || LeaderPlayerId == 0) return false;
 
-            // 1. Tenta pegar a posição do líder direto pelos dados do Grupo (Party)
             var partyLeader = _party.GetMembers().FirstOrDefault(m => m.Id == LeaderPlayerId);
             float leaderX = 0, leaderY = 0, leaderZ = 0;
             bool foundLeader = false;
@@ -112,9 +107,8 @@ namespace Full_Bot
             }
             else
             {
-                // Fallback: consulta outra janela aberta no BotHub caso ainda não tenham entrado em PT
                 var hubLeader = BotHub.FindBotByPlayerId(LeaderPlayerId);
-                if (hubLeader != null && hubLeader.Player.Base != 0)
+                if (hubLeader != null && hubLeader.Player != null && hubLeader.Player.Base != 0 && hubLeader.Player.HP > 0)
                 {
                     leaderX = hubLeader.Player.X;
                     leaderY = hubLeader.Player.Y;
@@ -127,7 +121,6 @@ namespace Full_Bot
 
             float dist = Distance2D(_player.X, _player.Z, leaderX, leaderZ);
 
-            // Só se move se ultrapassar o raio máximo (ex: 100m). Dentro de 100m, fica livre!
             if (dist > MaxLeaderDistance)
             {
                 _player.MoveTo(leaderX, leaderY, leaderZ);
@@ -164,34 +157,55 @@ namespace Full_Bot
             if (BuffRules.Count == 0 || _player.Idle != 0) return false;
 
             var activeIcons = _buffs.GetActiveBuffs().Select(b => b.IconId).ToHashSet();
+            uint previousTarget = _player.TargetId;
 
             foreach (var rule in BuffRules)
             {
                 if (!activeIcons.Contains(rule.IconId) && _skills.IsSkillReady(rule.SkillId))
                 {
-                    _player.TargetId = _player.Id;
+                    if (_player.TargetId != _player.Id)
+                        _player.TargetId = _player.Id;
+
                     _player.CastSkill(rule.SkillId);
+
+                    if (previousTarget != 0 && previousTarget != _player.Id)
+                        _player.TargetId = previousTarget;
+
                     status = $"Buffando a si mesmo (Skill {rule.SkillId})";
                     return true;
                 }
 
                 if (rule.BuffPartyAllies && _skills.IsSkillReady(rule.SkillId))
                 {
-                    foreach (var ally in BotHub.GetSnapshot())
+                    var snapshot = BotHub.GetSnapshot();
+                    for (int i = 0; i < snapshot.Count; i++)
                     {
-                        if (ally.Player.Id == _player.Id || ally.Player.Base == 0) continue;
-                        if (Distance2D(_player.X, _player.Z, ally.Player.X, ally.Player.Z) > 25f) continue;
+                        var ally = snapshot[i];
+                        if (ally?.Player == null || ally.Player.Id == _player.Id || ally.Player.Base == 0 || ally.Player.HP == 0)
+                            continue;
 
-                        if (!ally.Buffs.HasBuff(rule.IconId))
+                        if (Distance2D(_player.X, _player.Z, ally.Player.X, ally.Player.Z) > 25f)
+                            continue;
+
+                        var allyBuffs = ally.Buffs?.GetActiveBuffs();
+                        bool hasIcon = allyBuffs != null && allyBuffs.Any(b => b.IconId == rule.IconId);
+                        if (!hasIcon)
                         {
-                            _player.TargetId = ally.Player.Id;
+                            if (_player.TargetId != ally.Player.Id)
+                                _player.TargetId = ally.Player.Id;
+
                             _player.CastSkill(rule.SkillId);
+
+                            if (previousTarget != 0 && previousTarget != ally.Player.Id)
+                                _player.TargetId = previousTarget;
+
                             status = $"Buffando aliado {ally.Player.Name}";
                             return true;
                         }
                     }
                 }
             }
+
             return false;
         }
     }

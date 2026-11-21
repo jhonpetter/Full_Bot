@@ -1636,8 +1636,8 @@
                           "raw_description": "party_member_ptr-index-mul-4",
                           "base_address": "ELEMENTCLIENT.exe+A39F5C",
                           "address": "+0",
-                          "local_offsets": [ "0x0" ],
-                          "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x0" ],
+                          "local_offsets": [ "0x4" ],
+                          "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x4" ],
                           "vartype": "vtDword",
                           "is_array": true,
                           "own_is_array": true,
@@ -1663,7 +1663,7 @@
                               "base_address": "ELEMENTCLIENT.exe+A39F5C",
                               "address": "+0",
                               "local_offsets": [ "0xC" ],
-                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x0", "0xC" ],
+                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x4", "0xC" ],
                               "vartype": "vtDword",
                               "is_array": true,
                               "own_is_array": false,
@@ -1692,36 +1692,7 @@
                               "base_address": "ELEMENTCLIENT.exe+A39F5C",
                               "address": "+0",
                               "local_offsets": [ "0x10" ],
-                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x0", "0x10" ],
-                              "vartype": "vtDword",
-                              "is_array": true,
-                              "own_is_array": false,
-                              "has_ancestor_array": true,
-                              "array_source": "",
-                              "formula_steps": [],
-                              "ancestor_arrays": [
-                                {
-                                  "from_path": "base_address/struct_base/player_struct/party_base/party_member_array/party_member_ptr-index-mul-4",
-                                  "name": "party_member_ptr-index-mul-4",
-                                  "suffix": "-index-mul-4",
-                                  "mode": "formula"
-                                }
-                              ],
-                              "is_group_header": false,
-                              "children": {
-                              }
-                            },
-                            "party_member_target_id": {
-                              "var_name": "party_member_target_id",
-                              "base_name": "party_member_target_id",
-                              "array_suffix": "",
-                              "array_mode": "",
-                              "path": "base_address/struct_base/player_struct/party_base/party_member_array/party_member_ptr-index-mul-4/party_member_target_id",
-                              "raw_description": "party_member_target_id",
-                              "base_address": "ELEMENTCLIENT.exe+A39F5C",
-                              "address": "+0",
-                              "local_offsets": [ "0x16" ],
-                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x0", "0x16" ],
+                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x4", "0x10" ],
                               "vartype": "vtDword",
                               "is_array": true,
                               "own_is_array": false,
@@ -1750,7 +1721,7 @@
                               "base_address": "ELEMENTCLIENT.exe+A39F5C",
                               "address": "+0",
                               "local_offsets": [ "0x1C" ],
-                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x0", "0x1C" ],
+                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x4", "0x1C" ],
                               "vartype": "vtDword",
                               "is_array": true,
                               "own_is_array": false,
@@ -1779,7 +1750,7 @@
                               "base_address": "ELEMENTCLIENT.exe+A39F5C",
                               "address": "+0",
                               "local_offsets": [ "0x20" ],
-                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x0", "0x20" ],
+                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x4", "0x20" ],
                               "vartype": "vtDword",
                               "is_array": true,
                               "own_is_array": false,
@@ -1808,7 +1779,7 @@
                               "base_address": "ELEMENTCLIENT.exe+A39F5C",
                               "address": "+0",
                               "local_offsets": [ "0x24" ],
-                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x0", "0x24" ],
+                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x4", "0x24" ],
                               "vartype": "vtDword",
                               "is_array": true,
                               "own_is_array": false,
@@ -1837,7 +1808,7 @@
                               "base_address": "ELEMENTCLIENT.exe+A39F5C",
                               "address": "+0",
                               "local_offsets": [ "0x28" ],
-                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x0", "0x28" ],
+                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x4", "0x28" ],
                               "vartype": "vtDword",
                               "is_array": true,
                               "own_is_array": false,
@@ -1866,7 +1837,7 @@
                               "base_address": "ELEMENTCLIENT.exe+A39F5C",
                               "address": "+0",
                               "local_offsets": [ "0x34" ],
-                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x0", "0x34" ],
+                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x4", "0x34" ],
                               "vartype": "vtSingle",
                               "is_array": true,
                               "own_is_array": false,
@@ -1895,7 +1866,7 @@
                               "base_address": "ELEMENTCLIENT.exe+A39F5C",
                               "address": "+0",
                               "local_offsets": [ "0x38" ],
-                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x0", "0x38" ],
+                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x4", "0x38" ],
                               "vartype": "vtSingle",
                               "is_array": true,
                               "own_is_array": false,
@@ -1924,7 +1895,7 @@
                               "base_address": "ELEMENTCLIENT.exe+A39F5C",
                               "address": "+0",
                               "local_offsets": [ "0x3C" ],
-                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x0", "0x3C" ],
+                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x4", "0x3C" ],
                               "vartype": "vtSingle",
                               "is_array": true,
                               "own_is_array": false,
@@ -1941,6 +1912,99 @@
                               ],
                               "is_group_header": false,
                               "children": {
+                              }
+                            },
+                            "party_member_buff_count": {
+                              "var_name": "party_member_buff_count",
+                              "base_name": "party_member_buff_count",
+                              "array_suffix": "",
+                              "array_mode": "",
+                              "path": "base_address/struct_base/player_struct/party_base/party_member_array/party_member_ptr-index-mul-4/party_member_buff_count",
+                              "raw_description": "party_member_buff_count",
+                              "base_address": "ELEMENTCLIENT.exe+A39F5C",
+                              "address": "+0",
+                              "local_offsets": [ "0x64" ],
+                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x4", "0x64" ],
+                              "vartype": "vtDword",
+                              "is_array": true,
+                              "own_is_array": false,
+                              "has_ancestor_array": true,
+                              "array_source": "",
+                              "formula_steps": [],
+                              "ancestor_arrays": [
+                                {
+                                  "from_path": "base_address/struct_base/player_struct/party_base/party_member_array/party_member_ptr-index-mul-4",
+                                  "name": "party_member_ptr-index-mul-4",
+                                  "suffix": "-index-mul-4",
+                                  "mode": "formula"
+                                }
+                              ],
+                              "is_group_header": false,
+                              "children": {
+                              }
+                            },
+                            "party_member_buff_array": {
+                              "var_name": "party_member_buff_array",
+                              "base_name": "party_member_buff_array",
+                              "array_suffix": "",
+                              "array_mode": "",
+                              "path": "base_address/struct_base/player_struct/party_base/party_member_array/party_member_ptr-index-mul-4/party_member_buff_array",
+                              "raw_description": "party_member_buff_array",
+                              "base_address": "ELEMENTCLIENT.exe+A39F5C",
+                              "address": "+0",
+                              "local_offsets": [ "0x58" ],
+                              "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x4", "0x58" ],
+                              "vartype": "vtWord",
+                              "is_array": true,
+                              "own_is_array": false,
+                              "has_ancestor_array": true,
+                              "array_source": "",
+                              "formula_steps": [],
+                              "ancestor_arrays": [
+                                {
+                                  "from_path": "base_address/struct_base/player_struct/party_base/party_member_array/party_member_ptr-index-mul-4",
+                                  "name": "party_member_ptr-index-mul-4",
+                                  "suffix": "-index-mul-4",
+                                  "mode": "formula"
+                                }
+                              ],
+                              "is_group_header": false,
+                              "children": {
+                                "party_member_buff_icon_id-index-mul-12": {
+                                  "var_name": "party_member_buff_icon_id-index-mul-12",
+                                  "base_name": "party_member_buff_icon_id",
+                                  "array_suffix": "-index-mul-12",
+                                  "array_mode": "formula",
+                                  "path": "base_address/struct_base/player_struct/party_base/party_member_array/party_member_ptr-index-mul-4/party_member_buff_array/party_member_buff_icon_id-index-mul-12",
+                                  "raw_description": "party_member_buff_icon_id-index-mul-12",
+                                  "base_address": "ELEMENTCLIENT.exe+A39F5C",
+                                  "address": "+0",
+                                  "local_offsets": [ "0x0" ],
+                                  "offsets": [ "0x1C", "0x2C", "0x7B0", "0x14", "0x4", "0x58", "0x0" ],
+                                  "vartype": "vtWord",
+                                  "is_array": true,
+                                  "own_is_array": true,
+                                  "has_ancestor_array": true,
+                                  "array_source": "description",
+                                  "formula_steps": [
+                                    {
+                                      "op_symbol": "*",
+                                      "op_token": "mul",
+                                      "operand": "12"
+                                    }
+                                  ],
+                                  "ancestor_arrays": [
+                                    {
+                                      "from_path": "base_address/struct_base/player_struct/party_base/party_member_array/party_member_ptr-index-mul-4",
+                                      "name": "party_member_ptr-index-mul-4",
+                                      "suffix": "-index-mul-4",
+                                      "mode": "formula"
+                                    }
+                                  ],
+                                  "is_group_header": false,
+                                  "children": {
+                                  }
+                                }
                               }
                             }
                           }
@@ -3868,6 +3932,35 @@
                               "children": {
                               }
                             },
+                            "ppl_hp_max": {
+                              "var_name": "ppl_hp_max",
+                              "base_name": "ppl_hp_max",
+                              "array_suffix": "",
+                              "array_mode": "",
+                              "path": "base_address/struct_base/world_base/world_ppl_base/world_ppl_array/world_ppl_ptr-index-mul-4/ppl_hp_max",
+                              "raw_description": "ppl_hp_max",
+                              "base_address": "ELEMENTCLIENT.exe+A39F5C",
+                              "address": "+0",
+                              "local_offsets": [ "0x518" ],
+                              "offsets": [ "0x1C", "0x18", "0x20", "0x98", "0x0", "0x518" ],
+                              "vartype": "vtDword",
+                              "is_array": true,
+                              "own_is_array": false,
+                              "has_ancestor_array": true,
+                              "array_source": "",
+                              "formula_steps": [],
+                              "ancestor_arrays": [
+                                {
+                                  "from_path": "base_address/struct_base/world_base/world_ppl_base/world_ppl_array/world_ppl_ptr-index-mul-4",
+                                  "name": "world_ppl_ptr-index-mul-4",
+                                  "suffix": "-index-mul-4",
+                                  "mode": "formula"
+                                }
+                              ],
+                              "is_group_header": false,
+                              "children": {
+                              }
+                            },
                             "ppl_hp": {
                               "var_name": "ppl_hp",
                               "base_name": "ppl_hp",
@@ -3908,6 +4001,35 @@
                               "address": "+0",
                               "local_offsets": [ "0x4D0" ],
                               "offsets": [ "0x1C", "0x18", "0x20", "0x98", "0x0", "0x4D0" ],
+                              "vartype": "vtDword",
+                              "is_array": true,
+                              "own_is_array": false,
+                              "has_ancestor_array": true,
+                              "array_source": "",
+                              "formula_steps": [],
+                              "ancestor_arrays": [
+                                {
+                                  "from_path": "base_address/struct_base/world_base/world_ppl_base/world_ppl_array/world_ppl_ptr-index-mul-4",
+                                  "name": "world_ppl_ptr-index-mul-4",
+                                  "suffix": "-index-mul-4",
+                                  "mode": "formula"
+                                }
+                              ],
+                              "is_group_header": false,
+                              "children": {
+                              }
+                            },
+                            "ppl_mp_max": {
+                              "var_name": "ppl_mp_max",
+                              "base_name": "ppl_mp_max",
+                              "array_suffix": "",
+                              "array_mode": "",
+                              "path": "base_address/struct_base/world_base/world_ppl_base/world_ppl_array/world_ppl_ptr-index-mul-4/ppl_mp_max",
+                              "raw_description": "ppl_mp_max",
+                              "base_address": "ELEMENTCLIENT.exe+A39F5C",
+                              "address": "+0",
+                              "local_offsets": [ "0x51C" ],
+                              "offsets": [ "0x1C", "0x18", "0x20", "0x98", "0x0", "0x51C" ],
                               "vartype": "vtDword",
                               "is_array": true,
                               "own_is_array": false,

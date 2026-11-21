@@ -141,10 +141,40 @@
     <Compile Include="BotEngine\BotPartyFollow.cs" />
     <Compile Include="BotEngine\BotQuestRunner.Config.cs" />
     <Compile Include="BotEngine\BotQuestRunner.cs" />
+    <Compile Include="BotEngine\BotRoutines.cs" />
+    <Compile Include="BotEngine\Combat.cs" />
     <Compile Include="BotEngine\CombatModule.cs" />
+    <Compile Include="BotEngine\Combat\CombatBuffConfig.cs" />
+    <Compile Include="BotEngine\Combat\CombatBuffManager.cs" />
+    <Compile Include="BotEngine\Combat\CombatBuffSettingsForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="BotEngine\Combat\CombatDistanceProfile.cs" />
+    <Compile Include="BotEngine\Combat\CombatSkillMacro.cs" />
+    <Compile Include="BotEngine\Combat\CombatTargetValidator.cs" />
     <Compile Include="BotEngine\GatherModule.cs" />
+    <Compile Include="BotEngine\Integration\BotController.Modules.cs" />
+    <Compile Include="BotEngine\Integration\BotEngineModules.cs" />
+    <Compile Include="BotEngine\Move.cs" />
+    <Compile Include="BotEngine\Move\MoveAntiStuck.cs" />
+    <Compile Include="BotEngine\Move\MoveConfig.cs" />
+    <Compile Include="BotEngine\Move\MoveFarmArea.cs" />
+    <Compile Include="BotEngine\Move\MoveNavigation.cs" />
+    <Compile Include="BotEngine\Move\MoveObstacleAvoidance.cs" />
+    <Compile Include="BotEngine\Move\MoveRouteRecorder.cs" />
+    <Compile Include="BotEngine\SelfCultivation.cs" />
+    <Compile Include="BotEngine\SelfCultivation\SelfCultivationConfig.cs" />
+    <Compile Include="BotEngine\SelfCultivation\SelfCultivationSettingsForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="BotEngine\SupportModule.cs" />
+    <Compile Include="BotEngine\WhoAmI.cs" />
+    <Compile Include="BotEngine\WhoAmI\WhoAmIConfig.cs" />
+    <Compile Include="BotEngine\WhoAmI\WhoAmISettingsForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Config\ProfileManager.cs" />
+    <Compile Include="PlayerEngine\PartyCore.cs" />
     <Compile Include="PlayerEngine\PlayerBuffs.cs" />
     <Compile Include="PlayerEngine\PlayerCore.cs" />
     <Compile Include="PlayerEngine\PlayerFriends.cs" />
@@ -167,6 +197,14 @@
     <Compile Include="SystemEngine\MemoryProcess.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="UI\BotEngineModulesUiHelper.cs" />
+    <Compile Include="UI\BotGoalsForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\BotHub.ModulesMenu.cs" />
+    <Compile Include="UI\BotSettingsForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="UI\ClientPanel.cs">
       <SubType>UserControl</SubType>
     </Compile>
@@ -216,7 +254,9 @@
     <Content Include="Scripts\AutoAttack.asm">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Include="Scripts\BuyItem.asm" />
+    <Content Include="Scripts\BuyItem.asm">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Include="Scripts\CastSkill.asm">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
@@ -227,8 +267,12 @@
     <Content Include="Scripts\MoveTo.asm">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Include="Scripts\PickupQuest.asm" />
-    <Content Include="Scripts\SellItem.asm" />
+    <Content Include="Scripts\PickupQuest.asm">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Scripts\SellItem.asm">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Include="Scripts\SetFlyAlt.asm">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
@@ -238,7 +282,9 @@
     <Content Include="Scripts\SelectTarget.asm">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Include="Scripts\ToggleFly.asm" />
+    <Content Include="Scripts\ToggleFly.asm">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.7.2">

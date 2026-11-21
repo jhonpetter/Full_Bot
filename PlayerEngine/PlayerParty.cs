@@ -2,7 +2,7 @@
 
 namespace Full_Bot
 {
-    public class PartyMemberInfo
+    /*public class PartyMemberInfo
     {
         public uint Id { get; set; }
         public uint Level { get; set; }
@@ -13,6 +13,35 @@ namespace Full_Bot
         public float X { get; set; }
         public float Y { get; set; }
         public float Z { get; set; }
+    }*/
+    public class PartyMemberInfo
+    {
+        public int Index { get; set; }
+        public uint Id { get; set; }
+        public uint Level { get; set; }
+        public uint HP { get; set; }
+        public uint MP { get; set; }
+        public uint HPMax { get; set; }
+        public uint MPMax { get; set; }
+        public float X { get; set; }
+        public float Y { get; set; }
+        public float Z { get; set; }
+        public List<ushort> BuffIconIds { get; set; } = new List<ushort>();
+        public List<uint> BuffIds { get; set; } = new List<uint>();
+
+        public float HpPercent => HPMax > 0 ? (HP * 100f / HPMax) : 0f;
+        public float MpPercent => MPMax > 0 ? (MP * 100f / MPMax) : 0f;
+
+        public bool HasBuff(uint buffId)
+        {
+            if (buffId == 0) return false;
+            for (int i = 0; i < BuffIds.Count; i++)
+            {
+                if (BuffIds[i] == buffId)
+                    return true;
+            }
+            return false;
+        }
     }
 
     public class PlayerParty

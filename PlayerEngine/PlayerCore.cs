@@ -1,9 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace Full_Bot
 {
-    public class PlayerCore
+    public class PlayerCore //PlayerCore
     {
         private readonly MemoryProcess _mem;
         private readonly AsmRunner _asm;
@@ -71,25 +72,28 @@ namespace Full_Bot
         }
 
         // --- ATRIBUTOS VITAIS ---
-        // --- ATRIBUTOS VITAIS ---
         public string Name
         {
             get
             {
+                int pid = _mem.Process != null ? _mem.Process.Id : 0;
                 uint pBase = Base;
-                if (pBase == 0) return $"PID: {_mem.Process.Id} (Deslogado)";
+                if (pBase == 0) return pid > 0 ? $"PID: {pid} (Deslogado)" : "Deslogado";
 
                 var nameNode = _mem.GetNode("player_name");
                 var local = nameNode?.GetLocalOffsetsUInt();
                 if (local == null || local.Length == 0)
-                    return $"PID: {_mem.Process.Id}";
+                    return pid > 0 ? $"PID: {pid}" : "Sem Nome";
 
                 uint ptr = _mem.ReadUInt(pBase + local[0]);
                 if (local.Length > 1 && local[1] != 0 && ptr != 0)
                     ptr = _mem.ReadUInt(ptr + local[1]);
 
                 string n = _mem.ReadUnicodeString(ptr, 32);
-                return string.IsNullOrWhiteSpace(n) ? $"PID: {_mem.Process.Id}" : n;
+                if (string.IsNullOrWhiteSpace(n))
+                    return pid > 0 ? $"PID: {pid}" : "Sem Nome";
+
+                return n;
             }
         }
 
@@ -130,24 +134,37 @@ namespace Full_Bot
         public static float ToDisplayY(float rawY) => rawY / 10f;
         public static float ToDisplayZ(float rawZ) => (rawZ / 10f) + 550f;
 
-
-
         // --- PROPRIEDADES REATIVAS (GET LÊ MEMÓRIA / SET DISPARA AÇÃO) ---
         public uint TargetId
         {
             get => ReadPlayerUInt("player_target_id");
-            set
+            set => SelectTarget(value);
+        }
+
+        public static string FormatHex32(uint value)
+        {
+            return "0x" + value.ToString("X8", CultureInfo.InvariantCulture);
+        }
+
+        public void SelectTarget(uint serverId)
+        {
+            if (serverId == 0) return;
+
+            var confirmNode = _mem.GetNode("player_confirm_target_id");
+            uint confirmOff = (confirmNode != null && confirmNode.GetLocalOffsetsUInt().Length > 0)
+                ? confirmNode.GetLocalOffsetsUInt()[0]
+                : 0u;
+
+            // Garante conversão explícita para uint hex de 32 bits (ex: 2148548680 -> 0x80104048)
+            uint hexAsUint = uint.Parse(serverId.ToString("X8", CultureInfo.InvariantCulture), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+            var vars = new Dictionary<string, uint>
             {
-                if (value == TargetId) return;
-                var confirmNode = _mem.GetNode("player_confirm_target_id");
-                var vars = new Dictionary<string, uint>
-                {
-                    { "TARGET_ID", value },
-                    { "OPCODE_TARGET", 0x02u },
-                    { "OFF_PLAYER_CONFIRMTARGETID", confirmNode?.GetLocalOffsetsUInt().Length > 0 ? confirmNode.GetLocalOffsetsUInt()[0] : 0u }
-                };
-                _asm.RunScript(_mem, @"Scripts\SelectTarget.asm", vars);
-            }
+                { "TARGET_ID", hexAsUint },
+                { "OPCODE_TARGET", 0x02u },
+                { "OFF_PLAYER_CONFIRMTARGETID", confirmOff }
+            };
+            _asm.RunScript(_mem, @"Scripts\SelectTarget.asm", vars);
         }
 
         public float TargetX
