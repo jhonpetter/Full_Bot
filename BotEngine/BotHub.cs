@@ -20,7 +20,7 @@ namespace Full_Bot
             }
         }
 
-        public static int RefreshProcesses(string configPath = @"Config\config.json")
+        public static int RefreshProcesses(string configPath = @"Config\config.CT")
         {
             lock (_sync)
             {

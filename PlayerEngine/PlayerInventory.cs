@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace Full_Bot
 {
@@ -31,6 +31,18 @@ namespace Full_Bot
         public List<InventoryItemInfo> GetQuestItems()
             => ReadContainer("inv_quest_base", "inv_quest_slot_ptr-index-mul-4", "inv_quest_item_id", "inv_quest_item_amount", "inv_quest_item_max", "inv_quest_item_name", 40);
 
+        private uint GetNodeOffset(string key)
+        {
+            var node = _mem.GetNode(key);
+            if (node == null) return 0u;
+
+            var local = node.GetLocalOffsetsUInt();
+            if (local != null && local.Length > 0)
+                return local[0];
+
+            return node.HasOwnAddressDisplacement ? node.OwnAddressDisplacement : 0u;
+        }
+
         private List<InventoryItemInfo> ReadContainer(
             string baseKey,
             string slotArrayKey,
@@ -42,53 +54,60 @@ namespace Full_Bot
         {
             var list = new List<InventoryItemInfo>();
             uint pBase = _player.Base;
-            if (pBase == 0) return list;
+            if (pBase == 0u) return list;
 
-            uint containerOff = _mem.GetFirstLocalOffset(baseKey, 0);
-            if (containerOff == 0) return list;
+            uint containerOff = GetNodeOffset(baseKey);
+            if (containerOff == 0u) return list;
 
             uint invBase = _mem.ReadUInt(pBase + containerOff);
-            if (invBase == 0) return list;
+            if (invBase == 0u) return list;
 
             var baseNode = _mem.GetNode(baseKey);
             var slotNode = _mem.GetNode(slotArrayKey);
+            if (slotNode == null) return list;
 
-            // Local offsets do array dentro do container (ex: inv_item_array tem local_offsets ["0xC"])
-            uint arrayPtrOff = 0x0C;
+            uint arrayPtrOff = 0u;
             if (baseNode?.Children != null)
             {
-                foreach (var child in baseNode.Children.Values)
+                foreach (var child in baseNode.Children)
                 {
-                    if (child.Key.Contains("array") && !child.IsArray)
+                    if (child == null) continue;
+                    if (child.Key.Contains("array") && !child.HasFormula)
                     {
                         var l = child.GetLocalOffsetsUInt();
-                        if (l.Length > 0) arrayPtrOff = l[0];
-                        break;
+                        if (l != null && l.Length > 0)
+                        {
+                            arrayPtrOff = l[0];
+                            break;
+                        }
                     }
                 }
             }
 
-            uint arrayPtr = _mem.ReadUInt(invBase + arrayPtrOff);
-            if (arrayPtr == 0) return list;
+            if (arrayPtrOff == 0u) return list;
 
-            uint idOff = _mem.GetFirstLocalOffset(idKey, 0x0C);
-            uint amountOff = _mem.GetFirstLocalOffset(amountKey, 0x14);
-            uint maxOff = _mem.GetFirstLocalOffset(maxKey, 0x18);
+            uint arrayPtr = _mem.ReadUInt(invBase + arrayPtrOff);
+            if (arrayPtr == 0u) return list;
+
+            uint idOff = GetNodeOffset(idKey);
+            uint amountOff = GetNodeOffset(amountKey);
+            uint maxOff = GetNodeOffset(maxKey);
 
             var nameNode = _mem.GetNode(nameKey);
-            var nameOffs = nameNode?.GetLocalOffsetsUInt() ?? new uint[] { 0x58, 0x04 };
+            var nameOffs = nameNode?.GetLocalOffsetsUInt();
+            if (nameOffs == null || nameOffs.Length == 0) return list;
 
             for (int i = 0; i < maxSlots; i++)
             {
-                uint slotDelta = slotNode != null ? slotNode.EvaluateFormula((uint)i) : (uint)(i * 4);
+                uint slotDelta = slotNode.EvaluateFormula((uint)i);
                 uint itemPtr = _mem.ReadUInt(arrayPtr + slotDelta);
-                if (itemPtr == 0) continue;
+                if (itemPtr == 0u) continue;
 
                 uint itemId = _mem.ReadUInt(itemPtr + idOff);
-                if (itemId == 0) continue;
+                if (itemId == 0u) continue;
 
                 uint namePtr = _mem.ReadUInt(itemPtr + nameOffs[0]);
-                for (int n = 1; n < nameOffs.Length && namePtr != 0; n++)
+                for (int n = 1; n < nameOffs.Length && namePtr != 0u; n++)
                     namePtr = _mem.ReadUInt(namePtr + nameOffs[n]);
 
                 list.Add(new InventoryItemInfo
@@ -100,6 +119,7 @@ namespace Full_Bot
                     Name = _mem.ReadUnicodeString(namePtr, 48)
                 });
             }
+
             return list;
         }
     }

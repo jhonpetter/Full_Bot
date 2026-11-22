@@ -10,12 +10,19 @@ namespace Full_Bot
         SequentialStep = 2
     }
 
+    public enum CombatCasterKind
+    {
+        PhysicalOrArcher = 0,
+        MagicCaster = 1
+    }
+
     public class CombatSkillMacroConfig
     {
         public bool Enabled { get; set; } = true;
         public SkillRotationMode Mode { get; set; } = SkillRotationMode.MacroLoop;
         public double SkillCastIntervalSeconds { get; set; } = 0.65;
         public bool FallbackToAutoAttackWhenNoSkillReady { get; set; } = true;
+        public CombatCasterKind CasterKind { get; set; } = CombatCasterKind.PhysicalOrArcher;
         public List<uint> SkillIds { get; set; } = new List<uint>();
     }
 
@@ -55,7 +62,7 @@ namespace Full_Bot
 
         public bool IsWithinSkillRange(float mobDistance)
         {
-            if (float.IsNaN(mobDistance) || float.IsInfinity(mobDistance))
+            if (float.IsNaN(mobDistance) || float.IsInfinity(mobDistance) || mobDistance < 0f)
                 return false;
 
             float maxRange = GetSkillMaxRange();
@@ -73,7 +80,9 @@ namespace Full_Bot
             if (_player.Idle != 0)
                 return false;
 
+            bool isMagicCaster = _config.CasterKind == CombatCasterKind.MagicCaster;
             bool hasSkills = _config.Enabled && _config.SkillIds != null && _config.SkillIds.Count > 0;
+
             if (hasSkills && !IsWithinSkillRange(mobDistance))
             {
                 needsApproach = true;
@@ -95,6 +104,15 @@ namespace Full_Bot
                     status = $"Skill/Macro ID {chosenSkill} (Dist: {mobDistance:F1}m / Limite: {GetSkillMaxRange():F1}m)";
                     return true;
                 }
+            }
+
+            // Mago e Sacerdote não usam AutoAttack físico; Arqueiro e classes físicas usam normalmente
+            if (isMagicCaster)
+            {
+                status = hasSkills
+                    ? "Aguardando skill mágica sair de cooldown..."
+                    : "Sem skills mágicas configuradas (AutoAttack desativado para classe mágica).";
+                return false;
             }
 
             if (_config.FallbackToAutoAttackWhenNoSkillReady)
@@ -139,9 +157,16 @@ namespace Full_Bot
 
             if (_config.Mode == SkillRotationMode.MacroLoop)
             {
-                uint fallbackId = _config.SkillIds[_cursorIndex % count];
-                _cursorIndex = (_cursorIndex + 1) % count;
-                return fallbackId;
+                for (int attempts = 0; attempts < count; attempts++)
+                {
+                    int idx = (_cursorIndex + attempts) % count;
+                    uint sid = _config.SkillIds[idx];
+                    if (sid != 0)
+                    {
+                        _cursorIndex = (idx + 1) % count;
+                        return sid;
+                    }
+                }
             }
 
             return 0;

@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace Full_Bot
@@ -47,16 +47,33 @@ namespace Full_Bot
             _inventory = inventory;
         }
 
+        private uint GetNodeOffset(string key)
+        {
+            var node = _mem.GetNode(key);
+            if (node == null) return 0u;
+
+            var local = node.GetLocalOffsetsUInt();
+            if (local != null && local.Length > 0)
+                return local[0];
+
+            return node.HasOwnAddressDisplacement ? node.OwnAddressDisplacement : 0u;
+        }
+
         public List<ActiveQuestInfo> GetActiveQuests()
         {
             var allEntries = new List<ActiveQuestInfo>();
             uint pBase = _player.Base;
-            if (pBase == 0) return allEntries;
+            if (pBase == 0u) return allEntries;
 
-            var questRootNode = _mem.GetNode("quest_list_base");
-            var rootLocal = questRootNode?.GetLocalOffsetsUInt() ?? new uint[] { 0x14D8, 0x08 };
-            uint questRoot = _mem.ResolvePointer(pBase + rootLocal[0], ConfigManager.SkipFirst(rootLocal));
-            if (questRoot == 0) return allEntries;
+            var questRootOffs = _mem.GetNode("quest_list_base")?.GetLocalOffsetsUInt();
+            if (questRootOffs == null || questRootOffs.Length == 0) return allEntries;
+
+            // Ex: pBase -> +14D8 -> +8 => ponteiro base da lista de quests ativas (ex: 3219F8B8)
+            uint questRoot = _mem.ReadUInt(pBase + questRootOffs[0]);
+            for (int r = 1; r < questRootOffs.Length && questRoot != 0u; r++)
+                questRoot = _mem.ReadUInt(questRoot + questRootOffs[r]);
+
+            if (questRoot == 0u) return allEntries;
 
             byte activeCount = _mem.ReadByte(questRoot);
             if (activeCount == 0 || activeCount > MaxActiveQuestsSafety)
@@ -66,34 +83,38 @@ namespace Full_Bot
             var killedCountNode = _mem.GetNode("quest_killed_mob_count-index-mul-2-add-13");
             var targetSlotNode = _mem.GetNode("quest_target_ptr-index-mul-1e");
 
-            uint parentOff = _mem.GetFirstLocalOffset("quest_parent", 0x02);
-            uint statusOff = _mem.GetFirstLocalOffset("quest_status", 0x06);
-            uint templatePtrOff = _mem.GetFirstLocalOffset("quest_template_ptr", 0x0D);
+            if (taskSlotNode == null) return allEntries;
 
-            uint nameOff = _mem.GetFirstLocalOffset("quest_template_name", 0x08);
-            uint fromNpcOff = _mem.GetFirstLocalOffset("quest_from_npc", 0xF2);
-            uint toNpcOff = _mem.GetFirstLocalOffset("quest_to_npc", 0xF6);
-            uint targetCountOff = _mem.GetFirstLocalOffset("quest_target_diff_count", 0x353);
-            uint targetArrayOff = _mem.GetFirstLocalOffset("quest_target_array", 0x357);
+            uint questIdOff = GetNodeOffset("quest_id");
+            uint parentOff = GetNodeOffset("quest_parent");
+            uint statusOff = GetNodeOffset("quest_status");
+            uint templatePtrOff = GetNodeOffset("quest_template_ptr");
 
-            uint mobIdOff = _mem.GetFirstLocalOffset("quest_target_mob_id", 0x00);
-            uint mobsReqOff = _mem.GetFirstLocalOffset("quest_target_kill_count", 0x04);
-            uint itemIdOff = _mem.GetFirstLocalOffset("quest_target_item_id", 0x08);
-            uint itemsReqOff = _mem.GetFirstLocalOffset("quest_target_pickup_count", 0x0C);
+            uint nameOff = GetNodeOffset("quest_template_name");
+            uint fromNpcOff = GetNodeOffset("quest_from_npc");
+            uint toNpcOff = GetNodeOffset("quest_to_npc");
+            uint targetCountOff = GetNodeOffset("quest_target_diff_count");
+            uint targetArrayOff = GetNodeOffset("quest_target_array");
+
+            uint mobIdOff = GetNodeOffset("quest_target_mob_id");
+            uint mobsReqOff = GetNodeOffset("quest_target_kill_count");
+            uint itemIdOff = GetNodeOffset("quest_target_item_id");
+            uint itemsReqOff = GetNodeOffset("quest_target_pickup_count");
 
             var questBagItems = _inventory.GetQuestItems();
 
             for (uint i = 0; i < activeCount; i++)
             {
-                uint entryAddr = taskSlotNode != null
-                    ? (questRoot + taskSlotNode.EvaluateFormula(i))
-                    : (questRoot + 0x08 + (i * 0x20));
+                // Deslocamento direto na memória atual a partir de questRoot (ex: +0*20+8)
+                uint entryAddr = questRoot + taskSlotNode.EvaluateFormula(i);
 
-                ushort questId = _mem.ReadUShort(entryAddr);
+                ushort questId = _mem.ReadUShort(entryAddr + questIdOff);
                 if (questId == 0 || questId == 0xFFFF) continue;
 
                 byte parentIndex = _mem.ReadByte(entryAddr + parentOff);
                 byte status = _mem.ReadByte(entryAddr + statusOff);
+
+                // Ponteiro do template em entryAddr + templatePtrOff (+D)
                 uint templatePtr = _mem.ReadUInt(entryAddr + templatePtrOff);
 
                 var quest = new ActiveQuestInfo
@@ -105,7 +126,7 @@ namespace Full_Bot
                     Name = $"Quest #{questId}"
                 };
 
-                if (templatePtr != 0)
+                if (templatePtr != 0u)
                 {
                     string rawName = _mem.ReadUnicodeString(templatePtr + nameOff, 64);
                     if (!string.IsNullOrWhiteSpace(rawName))
@@ -117,11 +138,11 @@ namespace Full_Bot
                     uint targetCount = _mem.ReadUInt(templatePtr + targetCountOff);
                     uint targetArrayPtr = _mem.ReadUInt(templatePtr + targetArrayOff);
 
-                    if (targetArrayPtr != 0 && targetCount > 0 && targetCount <= MaxTargetsSafety)
+                    if (targetArrayPtr != 0u && targetCount > 0u && targetCount <= MaxTargetsSafety)
                     {
                         for (uint t = 0; t < targetCount; t++)
                         {
-                            uint tDelta = targetSlotNode != null ? targetSlotNode.EvaluateFormula(t) : (t * 0x1Eu);
+                            uint tDelta = targetSlotNode != null ? targetSlotNode.EvaluateFormula(t) : 0u;
                             uint tAddr = targetArrayPtr + tDelta;
 
                             uint mobId = _mem.ReadUInt(tAddr + mobIdOff);
@@ -129,23 +150,23 @@ namespace Full_Bot
                             uint itemId = _mem.ReadUInt(tAddr + itemIdOff);
                             uint itemsReq = _mem.ReadUInt(tAddr + itemsReqOff);
 
-                            uint itemsHave = 0;
-                            if (itemId > 0)
+                            uint itemsHave = 0u;
+                            if (itemId > 0u)
                             {
                                 itemsHave = (uint)questBagItems
                                     .Where(it => it.ItemId == itemId)
                                     .Sum(it => (long)it.Amount);
                             }
 
-                            uint killedOffset = killedCountNode != null
-                                ? killedCountNode.EvaluateFormula(t)
-                                : (0x13u + (t * 2u));
+                            // Deslocamento da contagem de mobs mortos no entryAddr atual (ex: +0*2+13)
+                            uint killedOffset = killedCountNode != null ? killedCountNode.EvaluateFormula(t) : 0u;
+                            uint mobsKilled = killedCountNode != null ? _mem.ReadUShort(entryAddr + killedOffset) : 0u;
 
                             quest.Targets.Add(new QuestTargetRequirement
                             {
                                 MobId = mobId,
                                 MobsRequired = mobsReq,
-                                MobsKilled = _mem.ReadUShort(entryAddr + killedOffset),
+                                MobsKilled = mobsKilled,
                                 ItemId = itemId,
                                 ItemsRequired = itemsReq,
                                 ItemsCollected = itemsHave

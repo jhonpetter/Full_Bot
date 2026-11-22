@@ -219,36 +219,5 @@ namespace Full_Bot
             return null;
         }
 
-
-        /* private TreeNode BuildQuestNode(ActiveQuestInfo q)
-         {
-             string title = string.IsNullOrWhiteSpace(q.Name) ? $"Quest #{q.QuestId}" : q.Name;
-             string statusTag = q.Status == 3 ? " [PRONTA P/ ENTREGAR]" : (q.Status == 2 ? " [Em Andamento]" : "");
-
-             var node = new TreeNode($"[{q.QuestId}] {title}{statusTag}");
-             if (q.Status == 3)
-                 node.ForeColor = Color.DarkGreen;
-
-             // Adiciona os objetivos / contadores como nós filhos
-             foreach (var t in q.Targets)
-             {
-                 if (t.MobId > 0)
-                     node.Nodes.Add(new TreeNode($"Objetivo: Matar Mob ID {t.MobId} -> {t.MobsKilled} / {t.MobsRequired}") { ForeColor = Color.DarkRed });
-
-                 if (t.ItemId > 0)
-                     node.Nodes.Add(new TreeNode($"Objetivo: Coletar Item ID {t.ItemId} -> {t.ItemsCollected} / {t.ItemsRequired}") { ForeColor = Color.DarkBlue });
-             }
-
-             if (q.ToNpcId > 0)
-                 node.Nodes.Add(new TreeNode($"Entregar no NPC ID: {q.ToNpcId}") { ForeColor = Color.DimGray });
-
-             // Adiciona recursivamente as sub-quests filhas em cascata
-             foreach (var child in q.Children)
-             {
-                 node.Nodes.Add(BuildQuestNode(child));
-             }
-
-             return node;
-         }*/
     }
 }

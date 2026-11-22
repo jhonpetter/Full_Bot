@@ -22,7 +22,7 @@ namespace Full_Bot
             _onSaved = onSaved;
 
             Text = $"Auto Cultivo (SelfCultivation) - {_charName}";
-            Size = new Size(540, 440);
+            Size = new Size(560, 440);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
@@ -36,31 +36,31 @@ namespace Full_Bot
         {
             chkEnabled = new CheckBox { Location = new Point(14, 14), Size = new Size(160, 22), Text = "Auto Cultivo Ativo" };
             chkAutoPick = new CheckBox { Location = new Point(185, 14), Size = new Size(210, 22), Text = "Pegar Quest no Jornal Auto" };
-            chkSoloAvoidBoss = new CheckBox { Location = new Point(400, 14), Size = new Size(125, 22), Text = "Solo Evita Boss" };
+            chkSoloAvoidBoss = new CheckBox { Location = new Point(405, 14), Size = new Size(135, 22), Text = "Solo Evita Boss" };
 
             chkWaitParty = new CheckBox { Location = new Point(14, 44), Size = new Size(210, 22), Text = "Aguardar PT no Local da Quest" };
             chkHoverHigh = new CheckBox { Location = new Point(230, 44), Size = new Size(175, 22), Text = "Voar Alto ao Aguardar" };
-            var lblAlt = new Label { Location = new Point(410, 46), Size = new Size(62, 20), Text = "Alt. (m):" };
-            txtHoverAlt = new TextBox { Location = new Point(474, 43), Size = new Size(48, 22) };
+            var lblAlt = new Label { Location = new Point(412, 46), Size = new Size(62, 20), Text = "Alt. (m):" };
+            txtHoverAlt = new TextBox { Location = new Point(476, 43), Size = new Size(60, 22) };
 
-            var lblMinLvl = new Label { Location = new Point(14, 78), Size = new Size(155, 20), Text = "Lvl Mín. PT Cultivo:" };
-            txtMinGroupLvl = new TextBox { Location = new Point(172, 75), Size = new Size(52, 22) };
+            var lblMinLvl = new Label { Location = new Point(14, 78), Size = new Size(150, 20), Text = "Lvl Mín. PT Cultivo:" };
+            txtMinGroupLvl = new TextBox { Location = new Point(166, 75), Size = new Size(52, 22) };
 
-            var lblDiff = new Label { Location = new Point(240, 78), Size = new Size(145, 20), Text = "Dif. Lvl PT Próximo:" };
-            txtMaxLvlDiff = new TextBox { Location = new Point(388, 75), Size = new Size(48, 22) };
+            var lblDiff = new Label { Location = new Point(230, 78), Size = new Size(140, 20), Text = "Dif. Lvl PT Próximo:" };
+            txtMaxLvlDiff = new TextBox { Location = new Point(372, 75), Size = new Size(48, 22) };
 
-            var lblPtFull = new Label { Location = new Point(445, 78), Size = new Size(52, 20), Text = "PT Full:" };
-            txtFullPartySize = new TextBox { Location = new Point(498, 75), Size = new Size(24, 22) };
+            var lblPtFull = new Label { Location = new Point(432, 78), Size = new Size(56, 20), Text = "PT Full:" };
+            txtFullPartySize = new TextBox { Location = new Point(490, 75), Size = new Size(46, 22) };
 
             chkHighLevelHelp = new CheckBox { Location = new Point(14, 112), Size = new Size(255, 22), Text = "Lvl Muito Acima Ajuda Outros na PT" };
             var lblCarry = new Label { Location = new Point(275, 114), Size = new Size(85, 20), Text = "Dif. Lvl Alto:" };
-            txtCarryDiff = new TextBox { Location = new Point(362, 111), Size = new Size(48, 22) };
-            chkShareInfo = new CheckBox { Location = new Point(418, 112), Size = new Size(110, 22), Text = "Compartilhar" };
+            txtCarryDiff = new TextBox { Location = new Point(362, 111), Size = new Size(52, 22) };
+            chkShareInfo = new CheckBox { Location = new Point(424, 112), Size = new Size(116, 22), Text = "Compartilhar" };
 
             var lblInfo = new Label
             {
                 Location = new Point(14, 150),
-                Size = new Size(508, 175),
+                Size = new Size(524, 175),
                 Text = "Regras aplicadas:\n" +
                        "• Em grupo: inicia acima do nível configurado (padrão 18) ou quando estiverem no mesmo range de nível.\n" +
                        "• Local da quest: pega no jornal se disponível e aguarda membros voando alto se marcado.\n" +
@@ -72,13 +72,13 @@ namespace Full_Bot
             btnSave = new Button
             {
                 Location = new Point(14, 350),
-                Size = new Size(248, 36),
+                Size = new Size(255, 36),
                 Text = "Salvar Cultivo (JSON)",
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold)
             };
             btnSave.Click += (s, e) => SaveConfig();
 
-            btnClose = new Button { Location = new Point(274, 350), Size = new Size(248, 36), Text = "Fechar" };
+            btnClose = new Button { Location = new Point(281, 350), Size = new Size(255, 36), Text = "Fechar" };
             btnClose.Click += (s, e) => Close();
 
             Controls.AddRange(new Control[]

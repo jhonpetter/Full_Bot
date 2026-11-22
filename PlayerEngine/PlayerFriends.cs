@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace Full_Bot
 {
@@ -23,40 +23,63 @@ namespace Full_Bot
             _player = player;
         }
 
+        private uint GetNodeOffset(string key)
+        {
+            var node = _mem.GetNode(key);
+            if (node == null) return 0u;
+
+            var local = node.GetLocalOffsetsUInt();
+            if (local != null && local.Length > 0)
+                return local[0];
+
+            return node.HasOwnAddressDisplacement ? node.OwnAddressDisplacement : 0u;
+        }
+
         public List<FriendInfo> GetFriends()
         {
             var list = new List<FriendInfo>();
             uint pBase = _player.Base;
-            if (pBase == 0) return list;
+            if (pBase == 0u) return list;
 
-            uint friendsBaseOff = _mem.GetFirstLocalOffset("friends_base", 0x14E4);
-            uint friendsBase = _mem.ReadUInt(pBase + friendsBaseOff);
-            if (friendsBase == 0) return list;
+            var friendsBaseOffs = _mem.GetNode("friends_base")?.GetLocalOffsetsUInt();
+            if (friendsBaseOffs == null || friendsBaseOffs.Length == 0) return list;
 
-            uint countOff = _mem.GetFirstLocalOffset("friend_count", 0x20);
+            uint friendsBase = _mem.ReadUInt(pBase + friendsBaseOffs[0]);
+            for (int i = 1; i < friendsBaseOffs.Length && friendsBase != 0u; i++)
+                friendsBase = _mem.ReadUInt(friendsBase + friendsBaseOffs[i]);
+
+            if (friendsBase == 0u) return list;
+
+            uint countOff = GetNodeOffset("friend_count");
             uint count = _mem.ReadUInt(friendsBase + countOff);
+            if (count == 0u || count > MaxFriendsSafety) return list;
 
-            var arrayNode = _mem.GetNode("friend_array");
-            var arrayOffs = arrayNode?.GetLocalOffsetsUInt() ?? new uint[] { 0x0C, 0x00, 0x14 };
-            uint arrayPtr = _mem.ResolvePointer(friendsBase + arrayOffs[0], ConfigManager.SkipFirst(arrayOffs));
-            if (arrayPtr == 0 || count == 0 || count > MaxFriendsSafety) return list;
+            var arrayOffs = _mem.GetNode("friend_array")?.GetLocalOffsetsUInt();
+            if (arrayOffs == null || arrayOffs.Length == 0) return list;
+
+            uint arrayPtr = _mem.ReadUInt(friendsBase + arrayOffs[0]);
+            for (int a = 1; a < arrayOffs.Length && arrayPtr != 0u; a++)
+                arrayPtr = _mem.ReadUInt(arrayPtr + arrayOffs[a]);
+
+            if (arrayPtr == 0u) return list;
 
             var slotNode = _mem.GetNode("friend_slot_ptr-index-mul-4");
+            if (slotNode == null) return list;
 
-            uint idOff = _mem.GetFirstLocalOffset("friend_id", 0x00);
-            uint classOff = _mem.GetFirstLocalOffset("friend_class", 0x04);
-            uint lvlOff = _mem.GetFirstLocalOffset("friend_level", 0x10);
-            var nameNode = _mem.GetNode("friend_name");
-            var nameOffs = nameNode?.GetLocalOffsetsUInt() ?? new uint[] { 0x18, 0x00 };
+            uint idOff = GetNodeOffset("friend_id");
+            uint classOff = GetNodeOffset("friend_class");
+            uint lvlOff = GetNodeOffset("friend_level");
+            var nameOffs = _mem.GetNode("friend_name")?.GetLocalOffsetsUInt();
+            if (nameOffs == null || nameOffs.Length == 0) return list;
 
             for (uint i = 0; i < count; i++)
             {
-                uint delta = slotNode != null ? slotNode.EvaluateFormula(i) : (i * 4u);
+                uint delta = slotNode.EvaluateFormula(i);
                 uint fPtr = _mem.ReadUInt(arrayPtr + delta);
-                if (fPtr == 0) continue;
+                if (fPtr == 0u) continue;
 
                 uint namePtr = _mem.ReadUInt(fPtr + nameOffs[0]);
-                for (int n = 1; n < nameOffs.Length && namePtr != 0; n++)
+                for (int n = 1; n < nameOffs.Length && namePtr != 0u; n++)
                     namePtr = _mem.ReadUInt(namePtr + nameOffs[n]);
 
                 list.Add(new FriendInfo
@@ -67,6 +90,7 @@ namespace Full_Bot
                     Name = _mem.ReadUnicodeString(namePtr, 32)
                 });
             }
+
             return list;
         }
     }

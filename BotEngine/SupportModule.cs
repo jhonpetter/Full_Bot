@@ -54,7 +54,7 @@ namespace Full_Bot
         public bool TryAcceptPartyInvite(out string status)
         {
             status = string.Empty;
-            if (!AutoAcceptParty) return false;
+            if (!AutoAcceptParty || _party == null) return false;
 
             if (_party.TryAcceptPendingInvite(AllowedPartyLeaderIds))
             {
@@ -67,34 +67,70 @@ namespace Full_Bot
         public bool TryAutoInviteFriends(out string status)
         {
             status = string.Empty;
-            if (!AutoInviteFriends || AutoInviteFriendIds.Count == 0) return false;
+            if (!AutoInviteFriends || AutoInviteFriendIds.Count == 0 || _party == null) return false;
 
-            if ((DateTime.Now - _lastInviteCheck).TotalSeconds < 5) return false;
-            _lastInviteCheck = DateTime.Now;
+            if ((DateTime.UtcNow - _lastInviteCheck).TotalSeconds < 5.0) return false;
+            _lastInviteCheck = DateTime.UtcNow;
 
-            var friendIds = _friends.GetFriends().Select(f => f.Id).ToHashSet();
-            var partyMemberIds = _party.GetMembers().Select(m => m.Id).ToHashSet();
+            var friendIds = new HashSet<uint>();
+            try
+            {
+                var friends = _friends?.GetFriends();
+                if (friends != null)
+                {
+                    foreach (var f in friends)
+                    {
+                        if (f != null && f.Id != 0)
+                            friendIds.Add(f.Id);
+                    }
+                }
+            }
+            catch
+            {
+                // Ignora falha temporária na leitura da lista de amigos
+            }
+
+            var partyMemberIds = new HashSet<uint>();
+            try
+            {
+                var members = _party.GetMembers();
+                if (members != null)
+                {
+                    foreach (var m in members)
+                    {
+                        if (m != null && m.Id != 0)
+                            partyMemberIds.Add(m.Id);
+                    }
+                }
+            }
+            catch
+            {
+                return false;
+            }
 
             foreach (uint targetId in AutoInviteFriendIds)
             {
                 if (targetId == 0 || targetId == _player.Id) continue;
+                if (partyMemberIds.Contains(targetId)) continue;
 
-                if (friendIds.Contains(targetId) && !partyMemberIds.Contains(targetId))
-                {
-                    _party.Invite(targetId);
-                    status = $"Convidando amigo (ID: {targetId}) para grupo...";
-                    return true;
-                }
+                // Se a lista de amigos carregou, exige que esteja nela; se veio vazia, permite convidar IDs configurados
+                if (friendIds.Count > 0 && !friendIds.Contains(targetId)) continue;
+
+                _party.Invite(targetId);
+                status = $"Convidando amigo (ID: {targetId}) para grupo...";
+                return true;
             }
+
             return false;
         }
 
         public bool TryMaintainProximityToLeader(out string status)
         {
             status = string.Empty;
-            if (IsLeader || LeaderPlayerId == 0) return false;
+            if (IsLeader || LeaderPlayerId == 0 || _party == null) return false;
 
-            var partyLeader = _party.GetMembers().FirstOrDefault(m => m.Id == LeaderPlayerId);
+            var members = _party.GetMembers() ?? new List<PartyMemberInfo>();
+            var partyLeader = members.FirstOrDefault(m => m != null && m.Id == LeaderPlayerId);
             float leaderX = 0, leaderY = 0, leaderZ = 0;
             bool foundLeader = false;
 
@@ -134,12 +170,14 @@ namespace Full_Bot
         public bool ShouldWaitForGroup(out string status)
         {
             status = string.Empty;
-            if (!IsLeader) return false;
+            if (!IsLeader || _party == null) return false;
 
             var members = _party.GetMembers();
+            if (members == null) return false;
+
             foreach (var m in members)
             {
-                if (m.Id == _player.Id || m.HP == 0) continue;
+                if (m == null || m.Id == _player.Id || m.HP == 0) continue;
 
                 float dist = Distance2D(_player.X, _player.Z, m.X, m.Z);
                 if (dist > WaitGroupRadius)
@@ -156,12 +194,36 @@ namespace Full_Bot
             status = string.Empty;
             if (BuffRules.Count == 0 || _player.Idle != 0) return false;
 
-            var activeIcons = _buffs.GetActiveBuffs().Select(b => b.IconId).ToHashSet();
+            var activeIcons = new HashSet<ushort>(_buffs?.GetActiveBuffs()?.Select(b => b.IconId) ?? Enumerable.Empty<ushort>());
             uint previousTarget = _player.TargetId;
+
+            // Só considera aliados que realmente fazem parte da PT atual
+            var partyMemberIds = new HashSet<uint>();
+            if (_party != null)
+            {
+                try
+                {
+                    var members = _party.GetMembers();
+                    if (members != null)
+                    {
+                        foreach (var m in members)
+                        {
+                            if (m != null && m.Id != 0 && m.Id != _player.Id)
+                                partyMemberIds.Add(m.Id);
+                        }
+                    }
+                }
+                catch
+                {
+                    // Se falhar leitura da PT, não buffa ninguém de fora
+                }
+            }
 
             foreach (var rule in BuffRules)
             {
-                if (!activeIcons.Contains(rule.IconId) && _skills.IsSkillReady(rule.SkillId))
+                if (rule == null || rule.SkillId == 0) continue;
+
+                if (!activeIcons.Contains(rule.IconId) && (_skills == null || _skills.IsSkillReady(rule.SkillId)))
                 {
                     if (_player.TargetId != _player.Id)
                         _player.TargetId = _player.Id;
@@ -175,13 +237,17 @@ namespace Full_Bot
                     return true;
                 }
 
-                if (rule.BuffPartyAllies && _skills.IsSkillReady(rule.SkillId))
+                if (rule.BuffPartyAllies && partyMemberIds.Count > 0 && (_skills == null || _skills.IsSkillReady(rule.SkillId)))
                 {
                     var snapshot = BotHub.GetSnapshot();
                     for (int i = 0; i < snapshot.Count; i++)
                     {
                         var ally = snapshot[i];
                         if (ally?.Player == null || ally.Player.Id == _player.Id || ally.Player.Base == 0 || ally.Player.HP == 0)
+                            continue;
+
+                        // Garante que o aliado está de fato no mesmo grupo (PT)
+                        if (!partyMemberIds.Contains(ally.Player.Id))
                             continue;
 
                         if (Distance2D(_player.X, _player.Z, ally.Player.X, ally.Player.Z) > 25f)
@@ -199,7 +265,7 @@ namespace Full_Bot
                             if (previousTarget != 0 && previousTarget != ally.Player.Id)
                                 _player.TargetId = previousTarget;
 
-                            status = $"Buffando aliado {ally.Player.Name}";
+                            status = $"Buffando aliado da PT {ally.Player.Name}";
                             return true;
                         }
                     }

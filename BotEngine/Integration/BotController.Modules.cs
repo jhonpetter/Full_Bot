@@ -17,7 +17,7 @@ namespace Full_Bot
             string charName = Player?.Name;
             if (!string.IsNullOrWhiteSpace(charName) && !charName.StartsWith("PID:"))
             {
-                Modules.LoadForCharacter(charName);
+                Modules.LoadForCharacter(charName, force: true);
             }
         }
 
@@ -67,10 +67,14 @@ namespace Full_Bot
                     tankEngaged = true;
                 else if (role == WhoAmIRole.Assistant && b.CurrentState == BotState.Combat)
                     assistantEngaged = true;
-                else if (role == WhoAmIRole.Support && b.CurrentState == BotState.Moving && b.Player.HP > 0 && b.Player.HPMax > 0)
+                else if (role == WhoAmIRole.Support && b.CurrentState == BotState.Moving && b.Player.HP > 0)
                 {
-                    float hpPct = b.Player.HP * 100f / b.Player.HPMax;
-                    if (hpPct <= b.Modules.WhoAmI.Config.Skills.SupportFleeHpPercent)
+                    bool lowHp = b.Player.HPMax > 0 &&
+                                 (b.Player.HP * 100f / b.Player.HPMax) <= b.Modules.WhoAmI.Config.Skills.SupportFleeHpPercent;
+                    bool fleeingThreat = string.Equals(b.Modules.WhoAmI.Config.GroupRole.ToString(), "Support", StringComparison.Ordinal) &&
+                                         (b.StatusText ?? string.Empty).IndexOf("fugindo", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                    if (lowHp || fleeingThreat)
                     {
                         supportDanger = true;
                         supportThreatMob = b.Player.TargetId;
@@ -90,16 +94,19 @@ namespace Full_Bot
             if (!dec.Handled)
                 return false;
 
-            if (dec.SpecializedSkillId > 0 && Player != null)
+            string finalStatus = dec.Status;
+            BotState finalState = dec.DesiredState;
+
+            if (dec.SpecializedSkillId > 0)
             {
                 if (dec.SpecializedSkillTargetId != 0 && Player.TargetId != dec.SpecializedSkillTargetId)
                     Player.TargetId = dec.SpecializedSkillTargetId;
 
                 Player.CastSkill(dec.SpecializedSkillId);
+                CurrentState = finalState;
+                StatusText = finalStatus;
+                return true;
             }
-
-            string finalStatus = dec.Status;
-            BotState finalState = dec.DesiredState;
 
             if (dec.HasMoveGoal)
             {

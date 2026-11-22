@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -22,12 +23,12 @@ namespace Full_Bot
         public Process Process { get; }
         public IntPtr Handle { get; private set; }
         public uint ModuleBase { get; }
-        public TreeConfigRoot Config { get; }
+        public CheatTableDocument Table { get; }
 
-        public MemoryProcess(Process process, TreeConfigRoot config)
+        public MemoryProcess(Process process, CheatTableDocument table)
         {
             Process = process ?? throw new ArgumentNullException(nameof(process));
-            Config = config ?? throw new ArgumentNullException(nameof(config));
+            Table = table ?? throw new ArgumentNullException(nameof(table));
 
             Handle = OpenProcess(ProcessAllAccess, false, process.Id);
             if (Handle == IntPtr.Zero)
@@ -39,80 +40,155 @@ namespace Full_Bot
             ModuleBase = unchecked((uint)process.MainModule.BaseAddress.ToInt64());
         }
 
-        // --- ACESSO A NÓS DA ÁRVORE ---
-        public OffsetNode GetNode(string key) => Config.FindByKey(key);
-        public OffsetNode GetNodeByPath(string path) => Config.FindByPath(path);
-
-        public uint GetNodeBaseAddress(OffsetNode node)
+        // --- ACESSO A NÓS DA TABELA .CT ---
+        public CtEntryNode GetNodeByPath(string path)
         {
-            if (node == null || string.IsNullOrWhiteSpace(node.BaseAddress))
-                return 0;
+            if (string.IsNullOrWhiteSpace(path) || Table?.Entries == null)
+                return null;
 
-            var (_, rva) = ConfigManager.SplitModuleAndRva(node.BaseAddress);
-            return ModuleBase + rva;
+            string[] parts = path.Trim().Split(new[] { '/', '\\', '>' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+                return null;
+
+            string targetName = parts[parts.Length - 1].Trim();
+            foreach (var entry in Table.Entries)
+            {
+                if (entry == null) continue;
+                if (string.Equals(entry.Key, targetName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(entry.BaseName, targetName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(entry.Description, targetName, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (parts.Length == 1)
+                        return entry;
+
+                    var cur = entry.Parent;
+                    int idx = parts.Length - 2;
+                    bool match = true;
+
+                    while (idx >= 0)
+                    {
+                        if (cur == null ||
+                            (!string.Equals(cur.Key, parts[idx].Trim(), StringComparison.OrdinalIgnoreCase) &&
+                             !string.Equals(cur.BaseName, parts[idx].Trim(), StringComparison.OrdinalIgnoreCase)))
+                        {
+                            match = false;
+                            break;
+                        }
+                        cur = cur.Parent;
+                        idx--;
+                    }
+
+                    if (match)
+                        return entry;
+                }
+            }
+
+            return null;
+        }
+        public CtEntryNode GetNode(string key) => Table?.Find(key);
+
+        public uint GetModuleBaseAddress(string moduleName)
+        {
+            if (string.IsNullOrWhiteSpace(moduleName))
+                return ModuleBase;
+
+            string cleanMain = (Process.MainModule?.ModuleName ?? string.Empty).Trim();
+            if (!string.IsNullOrEmpty(cleanMain) &&
+                string.Equals(cleanMain, moduleName.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                return ModuleBase;
+            }
+
+            if (Process.Modules != null)
+            {
+                foreach (ProcessModule mod in Process.Modules)
+                {
+                    if (mod != null && string.Equals(mod.ModuleName, moduleName.Trim(), StringComparison.OrdinalIgnoreCase))
+                        return unchecked((uint)mod.BaseAddress.ToInt64());
+                }
+            }
+
+            return ModuleBase;
         }
 
-        public uint GetNodeAddressByKey(string key)
+        public uint GetNodeBaseAddress(CtEntryNode node)
         {
-            var node = GetNode(key);
-            if (node == null) return 0;
+            if (node == null || string.IsNullOrWhiteSpace(node.BaseAddress))
+                return 0u;
 
-            uint baseAddr = GetNodeBaseAddress(node);
-            if (baseAddr == 0) return 0;
+            string raw = node.BaseAddress.Trim();
+            int plusIdx = raw.IndexOf('+');
+            if (plusIdx < 0)
+                return ParseHexUInt(raw);
 
-            var offsets = node.GetOffsetsUInt();
-            if (offsets.Length == 0)
-                return ReadUInt(baseAddr);
+            string modName = raw.Substring(0, plusIdx).Trim();
+            string rvaHex = raw.Substring(plusIdx + 1).Trim();
+            uint modBase = GetModuleBaseAddress(modName);
+            if (modBase == 0u) return 0u;
 
-            return ResolvePointer(baseAddr, offsets);
+            return unchecked(modBase + ParseHexUInt(rvaHex));
         }
 
         public uint GetFunctionAddressByKey(string key)
         {
             var node = GetNode(key);
-            if (node == null) return 0;
+            if (node == null) return 0u;
             return GetNodeBaseAddress(node);
         }
 
-        public uint GetFirstLocalOffset(string key, uint fallback = 0)
+        public uint GetFirstLocalOffset(string key, uint fallback = 0u)
         {
             var node = GetNode(key);
-            var local = node?.GetLocalOffsetsUInt();
-            if (local == null || local.Length == 0) return fallback;
-            return local[0];
+            if (node == null) return fallback;
+
+            if (node.LocalOffsets != null && node.LocalOffsets.Length > 0)
+                return node.LocalOffsets[0];
+
+            if (node.HasOwnAddressDisplacement)
+                return node.OwnAddressDisplacement;
+
+            return fallback;
         }
+
+        public uint GetNodeAddressByKey(string key, params uint[] arrayIndices)
+        {
+            var node = GetNode(key);
+            if (node == null) return 0u;
+            return ResolveNodeAddress(node, dereferenceLastPointer: true, arrayIndices: arrayIndices);
+        }
+
         // --- LEITURAS DE MEMÓRIA ---
         public byte ReadByte(uint addr)
         {
-            if (addr == 0) return 0;
+            if (addr == 0u) return 0;
             byte[] buf = new byte[1];
             return ReadProcessMemory(Handle, addr, buf, 1, out int read) && read == 1 ? buf[0] : (byte)0;
         }
 
         public ushort ReadUShort(uint addr)
         {
-            if (addr == 0) return 0;
+            if (addr == 0u) return 0;
             byte[] buf = new byte[2];
             return ReadProcessMemory(Handle, addr, buf, 2, out int read) && read == 2 ? BitConverter.ToUInt16(buf, 0) : (ushort)0;
         }
 
         public uint ReadUInt(uint addr)
         {
-            if (addr == 0) return 0;
+            if (addr == 0u) return 0u;
             byte[] buf = new byte[4];
             return ReadProcessMemory(Handle, addr, buf, 4, out int read) && read == 4 ? BitConverter.ToUInt32(buf, 0) : 0u;
         }
 
         public float ReadFloat(uint addr)
         {
-            if (addr == 0) return 0f;
+            if (addr == 0u) return 0f;
             byte[] buf = new byte[4];
             return ReadProcessMemory(Handle, addr, buf, 4, out int read) && read == 4 ? BitConverter.ToSingle(buf, 0) : 0f;
         }
 
         public string ReadUnicodeString(uint addr, int maxChars = 64)
         {
-            if (addr == 0 || maxChars <= 0) return string.Empty;
+            if (addr == 0u || maxChars <= 0) return string.Empty;
             byte[] buf = new byte[maxChars * 2];
             if (!ReadProcessMemory(Handle, addr, buf, buf.Length, out int read) || read <= 0)
                 return string.Empty;
@@ -122,72 +198,141 @@ namespace Full_Bot
             return nullIdx >= 0 ? str.Substring(0, nullIdx) : str;
         }
 
-        public string ReadNodeString(OffsetNode node, int maxChars = 64, bool derefFinalPointer = false, params uint[] arrayIndices)
+        public string ReadNodeString(CtEntryNode node, int maxChars = 64, bool derefFinalPointer = false, params uint[] arrayIndices)
         {
             if (node == null) return string.Empty;
-            uint addr = ResolveNodeAddress(node, arrayIndices);
-            if (addr == 0) return string.Empty;
+            uint addr = ResolveNodeAddress(node, dereferenceLastPointer: !derefFinalPointer, arrayIndices: arrayIndices);
+            if (addr == 0u) return string.Empty;
 
             if (derefFinalPointer)
                 addr = ReadUInt(addr);
 
-            if (addr == 0) return string.Empty;
+            if (addr == 0u) return string.Empty;
             return ReadUnicodeString(addr, maxChars);
         }
 
         public uint ResolvePointer(uint startAddr, params uint[] offsets)
         {
-            if (startAddr == 0) return 0;
+            if (startAddr == 0u) return 0u;
             uint addr = ReadUInt(startAddr);
             if (offsets == null) return addr;
 
             for (int i = 0; i < offsets.Length; i++)
             {
-                if (addr == 0) return 0;
-                addr = ReadUInt(addr + offsets[i]);
+                if (addr == 0u) return 0u;
+                addr = ReadUInt(unchecked(addr + offsets[i]));
             }
             return addr;
         }
 
-        // Resolve o endereço final de um nó considerando cadeias de ponteiros e fórmulas de array
-        public uint ResolveNodeAddress(OffsetNode node, params uint[] arrayIndices)
+        /// <summary>
+        /// Resolve o endereço final de um nó na árvore do .CT, respeitando:
+        /// - deslocamento próprio de <Address> (+0, +D, +11, etc.)
+        /// - cadeia de <Offsets>
+        /// - fórmulas em qualquer nível da linhagem
+        /// - opção de não desreferenciar o último passo quando o alvo já é o endereço do dado/estrutura
+        /// </summary>
+        public uint ResolveNodeAddress(CtEntryNode node, bool dereferenceLastPointer = true, params uint[] arrayIndices)
         {
-            if (node == null) return 0;
+            if (node == null || string.IsNullOrWhiteSpace(node.BaseAddress))
+                return 0u;
 
-            uint basePtrAddr = GetNodeBaseAddress(node);
-            if (basePtrAddr == 0) return 0;
+            var chainNodes = new List<CtEntryNode>();
+            var cur = node;
+            while (cur != null)
+            {
+                chainNodes.Add(cur);
+                cur = cur.Parent;
+            }
+            chainNodes.Reverse();
 
-            var offsets = node.GetOffsetsUInt();
-            if (offsets.Length == 0)
-                return ReadUInt(basePtrAddr);
+            int startIdx = 0;
+            for (int i = chainNodes.Count - 1; i > 0; i--)
+            {
+                string prevBase = chainNodes[i - 1].BaseAddress ?? string.Empty;
+                string currBase = chainNodes[i].BaseAddress ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(currBase) &&
+                    !string.Equals(currBase, prevBase, StringComparison.OrdinalIgnoreCase))
+                {
+                    startIdx = i;
+                    break;
+                }
+            }
+
+            uint basePtrAddr = GetNodeBaseAddress(chainNodes[startIdx]);
+            if (basePtrAddr == 0u)
+                return 0u;
 
             uint current = ReadUInt(basePtrAddr);
-            int formulaIdx = 0;
+            if (current == 0u)
+                return 0u;
 
-            for (int i = 0; i < offsets.Length; i++)
+            int formulaCursor = 0;
+
+            for (int i = startIdx; i < chainNodes.Count; i++)
             {
-                if (current == 0) return 0;
+                var n = chainNodes[i];
+                bool isTargetNode = (i == chainNodes.Count - 1);
 
-                bool isLast = (i == offsets.Length - 1);
-                uint stepOffset = offsets[i];
+                uint idxVal = 0u;
+                if (n.HasFormula && arrayIndices != null && formulaCursor < arrayIndices.Length)
+                    idxVal = arrayIndices[formulaCursor++];
 
-                if (isLast && node.IsArray && node.FormulaSteps != null && node.FormulaSteps.Count > 0)
+                bool hasOffsets = n.LocalOffsets != null && n.LocalOffsets.Length > 0;
+
+                if (n.HasOwnAddressDisplacement)
                 {
-                    uint idx = (arrayIndices != null && formulaIdx < arrayIndices.Length) ? arrayIndices[formulaIdx] : 0u;
-                    formulaIdx++;
-                    uint evaluated = node.EvaluateFormula(idx);
-                    return current + stepOffset + evaluated;
+                    uint disp = n.OwnAddressDisplacement;
+                    if (n.HasFormula && !hasOffsets)
+                        disp = unchecked(disp + n.EvalFormula(idxVal));
+
+                    if (!hasOffsets)
+                    {
+                        uint directAddr = unchecked(current + disp);
+                        if (isTargetNode && !dereferenceLastPointer)
+                            return directAddr;
+
+                        current = ReadUInt(directAddr);
+                        if (current == 0u)
+                            return 0u;
+                        continue;
+                    }
+                    else
+                    {
+                        current = unchecked(current + disp);
+                    }
                 }
 
-                if (!isLast)
-                    current = ReadUInt(current + stepOffset);
-                else
-                    return current + stepOffset;
+                if (!hasOffsets)
+                {
+                    if (n.HasFormula)
+                        current = unchecked(current + n.EvalFormula(idxVal));
+                    continue;
+                }
+
+                for (int o = 0; o < n.LocalOffsets.Length; o++)
+                {
+                    uint off = n.LocalOffsets[o];
+                    bool isLastOffsetOfTarget = isTargetNode && (o == n.LocalOffsets.Length - 1);
+
+                    if (n.HasFormula && o == n.LocalOffsets.Length - 1)
+                        off = unchecked(off + n.EvalFormula(idxVal));
+
+                    uint targetAddr = unchecked(current + off);
+
+                    if (isLastOffsetOfTarget && !dereferenceLastPointer)
+                        return targetAddr;
+
+                    current = ReadUInt(targetAddr);
+                    if (current == 0u)
+                        return 0u;
+                }
             }
 
             return current;
         }
-        // --- EXPORTA VARIÁVEIS PARA OS SCRIPTS .ASM A PARTIR DA ÁRVORE ---
+
+        // --- EXPORTA VARIÁVEIS PARA OS SCRIPTS .ASM A PARTIR DA TABELA .CT ---
         public Dictionary<string, uint> GetAsmVariables()
         {
             var vars = new Dictionary<string, uint>(StringComparer.OrdinalIgnoreCase);
@@ -197,48 +342,36 @@ namespace Full_Bot
             {
                 vars["BASE_ADDR"] = GetNodeBaseAddress(baseNode);
 
-                if (baseNode.Children != null && baseNode.Children.TryGetValue("struct_base", out var structBase))
+                var structBase = FindChildByKey(baseNode, "struct_base");
+                if (structBase != null)
                 {
-                    var sOffs = structBase.GetLocalOffsetsUInt();
-                    if (sOffs.Length > 0) vars["OFF_GAMERUNOFFSET"] = sOffs[0];
+                    if (structBase.LocalOffsets.Length > 0)
+                        vars["OFF_GAMERUNOFFSET"] = structBase.LocalOffsets[0];
 
-                    if (structBase.Children != null)
+                    var playerStruct = FindChildByKey(structBase, "player_struct");
+                    if (playerStruct != null)
                     {
-                        if (structBase.Children.TryGetValue("player_struct", out var playerStruct))
-                        {
-                            var pOffs = playerStruct.GetLocalOffsetsUInt();
-                            if (pOffs.Length > 0) vars["OFF_HOSTPLAYEROFFSET"] = pOffs[0];
+                        if (playerStruct.LocalOffsets.Length > 0)
+                            vars["OFF_HOSTPLAYEROFFSET"] = playerStruct.LocalOffsets[0];
 
-                            if (playerStruct.Children != null &&
-                                playerStruct.Children.TryGetValue("player_target_id", out var targetIdNode))
-                            {
-                                var tOffs = targetIdNode.GetLocalOffsetsUInt();
-                                if (tOffs.Length > 0) vars["OFF_PLAYER_TARGETID"] = tOffs[0];
-                            }
-                        }
-
-                        if (structBase.Children.TryGetValue("world_base", out var worldBase))
-                        {
-                            var wOffs = worldBase.GetLocalOffsetsUInt();
-                            if (wOffs.Length > 0) vars["OFF_WORLDOFFSET"] = wOffs[0];
-                        }
+                        var targetIdNode = FindChildByKey(playerStruct, "player_target_id");
+                        if (targetIdNode != null && targetIdNode.LocalOffsets.Length > 0)
+                            vars["OFF_PLAYER_TARGETID"] = targetIdNode.LocalOffsets[0];
                     }
+
+                    var worldBase = FindChildByKey(structBase, "world_base");
+                    if (worldBase != null && worldBase.LocalOffsets.Length > 0)
+                        vars["OFF_WORLDOFFSET"] = worldBase.LocalOffsets[0];
                 }
             }
 
             var netNode = GetNode("network");
-            if (netNode != null)
-            {
-                var nOffs = netNode.GetLocalOffsetsUInt();
-                if (nOffs.Length > 0) vars["OFF_NETWORKOFFSET"] = nOffs[0];
-            }
+            if (netNode != null && netNode.LocalOffsets.Length > 0)
+                vars["OFF_NETWORKOFFSET"] = netNode.LocalOffsets[0];
 
             var dialogTimeNode = GetNode("dialog_time_hit");
-            if (dialogTimeNode != null)
-            {
-                var dOffs = dialogTimeNode.GetLocalOffsetsUInt();
-                if (dOffs.Length > 0) vars["OFF_DIALOG_TIME_HIT"] = dOffs[0];
-            }
+            if (dialogTimeNode != null && dialogTimeNode.LocalOffsets.Length > 0)
+                vars["OFF_DIALOG_TIME_HIT"] = dialogTimeNode.LocalOffsets[0];
 
             AddNodeAddressVar(vars, "DIALOG_POPUP_BASE", "dialog_popup_base");
             AddNodeAddressVar(vars, "DIALOG_COUNT", "dialog_count");
@@ -261,6 +394,23 @@ namespace Full_Bot
 
             return vars;
         }
+
+        private static CtEntryNode FindChildByKey(CtEntryNode parent, string key)
+        {
+            if (parent == null || parent.Children == null) return null;
+            foreach (var child in parent.Children)
+            {
+                if (child == null) continue;
+                if (string.Equals(child.Key, key, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(child.BaseName, key, StringComparison.OrdinalIgnoreCase))
+                    return child;
+
+                var nested = FindChildByKey(child, key);
+                if (nested != null) return nested;
+            }
+            return null;
+        }
+
         private void AddNodeAddressVar(Dictionary<string, uint> vars, string varName, string nodeKey)
         {
             var node = GetNode(nodeKey);
@@ -273,6 +423,17 @@ namespace Full_Bot
             var node = GetNode(nodeKey);
             if (node != null)
                 vars[varName] = GetNodeBaseAddress(node);
+        }
+
+        private static uint ParseHexUInt(string raw)
+        {
+            string s = raw.Trim();
+            if (s.StartsWith("+") || s.StartsWith("-"))
+                s = s.Substring(1).Trim();
+            if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                s = s.Substring(2);
+
+            return uint.Parse(s, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
         }
 
         public void Dispose()

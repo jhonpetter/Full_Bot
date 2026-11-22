@@ -173,6 +173,8 @@
     <Compile Include="BotEngine\WhoAmI\WhoAmISettingsForm.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="Config\CheatTableReader.cs" />
+    <Compile Include="Config\CtEntryNode.cs" />
     <Compile Include="Config\ProfileManager.cs" />
     <Compile Include="PlayerEngine\PartyCore.cs" />
     <Compile Include="PlayerEngine\PlayerBuffs.cs" />
@@ -187,7 +189,6 @@
     <Compile Include="PlayerEngine\TasksQuestNews.cs" />
     <Compile Include="PlayerEngine\WorldEntities.cs" />
     <Compile Include="SystemEngine\AsmRunner.cs" />
-    <Compile Include="Config\ConfigManager.cs" />
     <Compile Include="Form1.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -205,9 +206,7 @@
     <Compile Include="UI\BotSettingsForm.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="UI\ClientPanel.cs">
-      <SubType>UserControl</SubType>
-    </Compile>
+    <Compile Include="UI\ClientPanel.cs" />
     <Compile Include="UI\MapPanel.cs">
       <SubType>Component</SubType>
     </Compile>
@@ -230,7 +229,7 @@
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
     <None Include="app.manifest" />
-    <None Include="Config\config.json">
+    <None Include="Config\config.CT">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Include="packages.config" />

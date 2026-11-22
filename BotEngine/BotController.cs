@@ -19,7 +19,7 @@ namespace Full_Bot
     {
         private readonly object _stateLock = new object();
 
-        public TreeConfigRoot Config { get; }
+        public CheatTableDocument Config { get; }
         public MemoryProcess Memory { get; private set; }
         public AsmRunner Asm { get; private set; }
 
@@ -44,9 +44,9 @@ namespace Full_Bot
         public string StatusText { get; set; } = "Aguardando";
         public bool IsEnabled { get; set; }
 
-        public BotController(string configPath = @"Config\config.json")
+        public BotController(string configPath = @"Config\config.CT")
         {
-            Config = ConfigManager.Load(configPath);
+            Config = CheatTableReader.Load(configPath);
             Tasks = new TasksLoader();
         }
 

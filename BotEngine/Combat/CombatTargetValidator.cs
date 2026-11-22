@@ -29,6 +29,12 @@ namespace Full_Bot
                 return true;
             }
 
+            if (mob.HPMax > 0 && mob.HP == 0)
+            {
+                reason = "Mob já derrotado (HP == 0)";
+                return true;
+            }
+
             mobCurrentTargetId = TryReadMobTargetId(mob);
             if (mobCurrentTargetId == 0)
                 return false;
@@ -49,7 +55,7 @@ namespace Full_Bot
                 }
                 catch
                 {
-                    // Ignora falha de leitura da PT
+                    // Ignora falha transitória de leitura da PT
                 }
             }
 
@@ -72,15 +78,22 @@ namespace Full_Bot
             if (_mem == null || mob == null)
                 return 0;
 
-            uint mobAddr = ResolveEntityAddress(mob);
-            if (mobAddr == 0 || mobAddr < 0x00010000u || mobAddr > 0x7FFFFFFFu)
-                return 0;
-
-            var node = _mem.GetNode("mob_target_id");
-            var local = node?.GetLocalOffsetsUInt();
-            if (local != null && local.Length > 0 && local[0] != 0)
+            try
             {
-                return _mem.ReadUInt(mobAddr + local[0]);
+                uint mobAddr = ResolveEntityAddress(mob);
+                if (mobAddr == 0 || mobAddr < 0x00010000u || mobAddr > 0x7FFFFFFFu)
+                    return 0;
+
+                var node = _mem.GetNode("mob_target_id");
+                var local = node?.GetLocalOffsetsUInt();
+                if (local != null && local.Length > 0 && local[0] != 0)
+                {
+                    return _mem.ReadUInt(mobAddr + local[0]);
+                }
+            }
+            catch
+            {
+                // Ignora leitura inválida de memória do alvo
             }
 
             return 0;

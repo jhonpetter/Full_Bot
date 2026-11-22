@@ -93,7 +93,7 @@ namespace Full_Bot
 
         public static string GetConfigFilePath(string charName)
         {
-            string folder = Path.Combine("Configs", "WhoAmI");
+            string folder = Path.Combine("Config", "WhoAmI");
             if (!Directory.Exists(folder))
                 Directory.CreateDirectory(folder);
 

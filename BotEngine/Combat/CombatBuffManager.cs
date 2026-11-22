@@ -20,7 +20,6 @@ namespace Full_Bot
 
         private DateTime _lastCastUtc = DateTime.MinValue;
         private int _partyTargetCursor = 0;
-        private bool _selfIncludedForCurrentRule = false;
         private DateTime _groupBuffStartUtc = DateTime.MinValue;
 
         public CombatBuffManager(
@@ -69,6 +68,13 @@ namespace Full_Bot
             }
         }
 
+        private static bool IsValidCoord(float x, float z)
+        {
+            return !float.IsNaN(x) && !float.IsInfinity(x) &&
+                   !float.IsNaN(z) && !float.IsInfinity(z) &&
+                   (Math.Abs(x) > 0.01f || Math.Abs(z) > 0.01f);
+        }
+
         public bool TryProcessBuffs(bool isCurrentlyKillingMob, out BotState desiredState, out string status)
         {
             desiredState = BotState.Idle;
@@ -79,9 +85,10 @@ namespace Full_Bot
 
             bool inParty = IsInParty();
 
-            // 1.1 Em solo, só buffa se não estiver matando um mob (quando configurado)
+            // Modo Solo: só buffa se permitido e fora de combate quando configurado
             if (!inParty)
             {
+                _groupBuffStartUtc = DateTime.MinValue;
                 SetFinishedGroupBuffs(true);
 
                 if (!_config.SoloBuffEnabled)
@@ -90,9 +97,10 @@ namespace Full_Bot
                 if (_config.OnlyBuffWhenNotKillingMob && (isCurrentlyKillingMob || _player.TargetId != 0))
                     return false;
 
-                if (HasNearbyMobCloserThan(_config.SoloSafeDistanceFromMobs, out float nearestMobDist, out float mx, out float my, out float mz))
+                if (HasNearbyMobCloserThan(_config.SoloSafeDistanceFromMobs, out float nearestMobDist, out float mx, out _, out float mz))
                 {
-                    if (nearestMobDist < Math.Min(6.0f, _config.SoloSafeDistanceFromMobs))
+                    float fleeThreshold = Math.Min(6.0f, Math.Max(1.0f, _config.SoloSafeDistanceFromMobs));
+                    if (nearestMobDist < fleeThreshold && IsValidCoord(mx, mz) && IsValidCoord(_player.X, _player.Z))
                     {
                         float dx = _player.X - mx;
                         float dz = _player.Z - mz;
@@ -111,9 +119,10 @@ namespace Full_Bot
                 return TryApplySoloBuffs(out status);
             }
 
-            // 1.2 e 1.3 Modo Grupo: juntar próximo ao líder (índice 0), aplicar buffs e sincronizar término
+            // Modo Grupo: reunir próximo ao líder (índice 0), aplicar buffs e sincronizar término
             if (!_config.GroupBuffEnabled)
             {
+                _groupBuffStartUtc = DateTime.MinValue;
                 SetFinishedGroupBuffs(true);
                 return false;
             }
@@ -189,9 +198,11 @@ namespace Full_Bot
             if (members == null || members.Count == 0)
                 return false;
 
-            // O líder está sempre no índice 0 da lista de membros
             var leader = members[0];
             if (leader == null || leader.Id == 0 || leader.Id == _player.Id)
+                return false;
+
+            if (!IsValidCoord(leader.X, leader.Z) || !IsValidCoord(_player.X, _player.Z))
                 return false;
 
             string leaderLabel = _world != null ? _world.ResolvePartyLeaderName(leader.Id) : $"ID:{leader.Id}";
@@ -220,6 +231,7 @@ namespace Full_Bot
             var activeIcons = new HashSet<ushort>(_buffs?.GetActiveBuffs()?.Select(b => b.IconId) ?? Enumerable.Empty<ushort>());
             var partyMembers = _party?.GetMembers() ?? new List<PartyMemberInfo>();
             var memberById = new Dictionary<uint, PartyMemberInfo>();
+
             foreach (var m in partyMembers)
             {
                 if (m != null && m.Id != 0 && !memberById.ContainsKey(m.Id))
@@ -230,8 +242,6 @@ namespace Full_Bot
             {
                 if (rule == null || !rule.Enabled || rule.SkillId == 0)
                     continue;
-
-                _selfIncludedForCurrentRule = false;
 
                 if (rule.TargetType == BuffTargetType.SelfOrAoENoTarget)
                 {
@@ -244,38 +254,35 @@ namespace Full_Bot
                     return true;
                 }
 
-                var targets = new List<uint>();
-                if (rule.IncludeSelf && _player.Id != 0)
-                    targets.Add(_player.Id);
-
-                foreach (var member in partyMembers)
-                {
-                    if (member != null && member.Id != 0 && !targets.Contains(member.Id))
-                        targets.Add(member.Id);
-                }
-
-                if (targets.Count == 0)
-                    continue;
-
                 if (rule.IncludeSelf && _player.Id != 0)
                 {
                     if (rule.IconId == 0 || !activeIcons.Contains(rule.IconId))
                     {
-                        _player.SelectTarget(_player.Id);
+                        if (_player.TargetId != _player.Id)
+                            _player.SelectTarget(_player.Id);
+
                         _lastCastUtc = DateTime.UtcNow;
                         _player.CastSkill(rule.SkillId);
-                        _selfIncludedForCurrentRule = true;
                         status = $"[Grupo Target -> Self] Skill {rule.SkillId} no próprio char";
                         return true;
                     }
-                    _selfIncludedForCurrentRule = true;
                 }
 
-                for (int i = 0; i < targets.Count; i++)
+                var allyTargets = new List<uint>();
+                foreach (var member in partyMembers)
                 {
-                    uint targetId = targets[(_partyTargetCursor + i) % targets.Count];
-                    if (targetId == _player.Id && rule.IncludeSelf)
-                        continue;
+                    if (member != null && member.Id != 0 && member.Id != _player.Id && member.HP > 0 && !allyTargets.Contains(member.Id))
+                        allyTargets.Add(member.Id);
+                }
+
+                if (allyTargets.Count == 0)
+                    continue;
+
+                int count = allyTargets.Count;
+                for (int i = 0; i < count; i++)
+                {
+                    int idx = (_partyTargetCursor + i) % count;
+                    uint targetId = allyTargets[idx];
 
                     if (rule.IconId != 0 && memberById.TryGetValue(targetId, out PartyMemberInfo memberInfo))
                     {
@@ -283,10 +290,12 @@ namespace Full_Bot
                             continue;
                     }
 
-                    _player.SelectTarget(targetId);
+                    if (_player.TargetId != targetId)
+                        _player.SelectTarget(targetId);
+
                     _lastCastUtc = DateTime.UtcNow;
                     _player.CastSkill(rule.SkillId);
-                    _partyTargetCursor = (_partyTargetCursor + i + 1) % targets.Count;
+                    _partyTargetCursor = (idx + 1) % count;
                     status = $"[Grupo Target] Skill {rule.SkillId} no membro ID {targetId}";
                     return true;
                 }
@@ -336,12 +345,14 @@ namespace Full_Bot
             if (members == null || members.Count <= 1) return true;
 
             DateTime now = DateTime.UtcNow;
+            double maxAgeSeconds = Math.Max(5.0, _config.GroupSyncWaitSeconds * 2.0);
+
             foreach (var m in members)
             {
-                if (m == null || m.Id == 0 || m.Id == _player.Id) continue;
+                if (m == null || m.Id == 0 || m.Id == _player.Id || m.HP == 0) continue;
 
                 bool fresh = _groupMemberBuffStamp.TryGetValue(m.Id, out DateTime stamp) &&
-                             (now - stamp).TotalSeconds <= Math.Max(5.0, _config.GroupSyncWaitSeconds * 2.0);
+                             (now - stamp).TotalSeconds <= maxAgeSeconds;
                 bool ready = fresh && _groupMemberBuffReady.TryGetValue(m.Id, out bool r) && r;
 
                 if (!ready)
@@ -356,12 +367,18 @@ namespace Full_Bot
             nearestDist = float.MaxValue;
             mx = my = mz = 0f;
 
+            if (!IsValidCoord(_player.X, _player.Z))
+                return false;
+
             var entities = _world?.GetMobsAndNpcs();
             if (entities == null) return false;
 
             foreach (var e in entities)
             {
                 if (e == null || e.Type != 6 || e.ServerId == 0) continue;
+                if (e.HPMax > 0 && e.HP == 0) continue;
+                if (!IsValidCoord(e.X, e.Z)) continue;
+
                 float d = MoveObstacleAvoidance.Dist2D(_player.X, _player.Z, e.X, e.Z);
                 if (d < nearestDist)
                 {

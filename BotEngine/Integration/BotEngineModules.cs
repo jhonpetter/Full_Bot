@@ -29,6 +29,7 @@ namespace Full_Bot
         private readonly Move _move;
 
         private string _currentCharKey = "default";
+        private DateTime _lastConfigReloadUtc = DateTime.MinValue;
 
         public WhoAmI WhoAmI { get; private set; }
         public SelfCultivation Cultivation { get; private set; }
@@ -56,14 +57,44 @@ namespace Full_Bot
             WhoAmI = new WhoAmI(_player, _party, _world, whoCfg);
             Cultivation = new SelfCultivation(_player, _party, _world, cultCfg);
             Combat = new Combat(_player, buffs, skills, _party, _world, _mem, buffCfg);
+            ApplyBuffConfigCombatSettings(buffCfg);
+            _lastConfigReloadUtc = DateTime.UtcNow;
         }
 
-        public void LoadForCharacter(string charName)
+        private void ApplyBuffConfigCombatSettings(CombatBuffConfig buffCfg)
         {
-            _currentCharKey = string.IsNullOrWhiteSpace(charName) ? "default" : charName;
-            WhoAmI?.UpdateConfig(WhoAmIConfig.LoadForChar(_currentCharKey));
-            Cultivation?.UpdateConfig(SelfCultivationConfig.LoadForChar(_currentCharKey));
-            Combat?.UpdateBuffConfig(CombatBuffConfig.LoadForChar(_currentCharKey));
+            if (Combat == null || buffCfg == null) return;
+
+            var distProfile = CombatDistanceProfile.CreatePreset(buffCfg.Archetype);
+            var macroCfg = new CombatSkillMacroConfig
+            {
+                Enabled = Combat.SkillMacro != null ? true : true,
+                CasterKind = buffCfg.CasterKind
+            };
+
+            Combat.UpdateCombatProfile(distProfile, macroCfg);
+        }
+
+        public void LoadForCharacter(string charName, bool force = false)
+        {
+            string normalizedKey = string.IsNullOrWhiteSpace(charName) ? "default" : charName;
+            DateTime now = DateTime.UtcNow;
+            bool charChanged = !string.Equals(_currentCharKey, normalizedKey, StringComparison.Ordinal);
+
+            if (!force && !charChanged && (now - _lastConfigReloadUtc).TotalSeconds < 2.0)
+                return;
+
+            _currentCharKey = normalizedKey;
+            _lastConfigReloadUtc = now;
+
+            var whoCfg = WhoAmIConfig.LoadForChar(_currentCharKey);
+            var cultCfg = SelfCultivationConfig.LoadForChar(_currentCharKey);
+            var buffCfg = CombatBuffConfig.LoadForChar(_currentCharKey);
+
+            WhoAmI?.UpdateConfig(whoCfg);
+            Cultivation?.UpdateConfig(cultCfg);
+            Combat?.UpdateBuffConfig(buffCfg);
+            ApplyBuffConfigCombatSettings(buffCfg);
         }
 
         public bool ExecuteMovement(bool useFlight, float x, float y, float z, out BotState state, out string status)
@@ -73,7 +104,7 @@ namespace Full_Bot
 
             if (useFlight)
             {
-                int alt = (int)Math.Max(1f, Math.Min(69f, y));
+                int alt = (int)Math.Max(1f, Math.Min(69f, Math.Abs(y)));
                 _player.MoveToFly(x, z, alt);
                 status = $"Voando para ({x:F0}, {z:F0}) alt {alt}m";
                 return true;

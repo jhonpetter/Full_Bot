@@ -25,10 +25,17 @@ namespace Full_Bot
         public uint LeaderPlayerId { get; set; } = 0;
         public float MaxLeaderDistance { get; set; } = 100f;
 
-        // Metas de combate, defesa e área/voo
+        public LootFilterMode LootMode { get; set; } = LootFilterMode.SomenteMoedas;
+        public float LootRadius { get; set; } = 6.0f;
+        public List<uint> CollectItemIds { get; set; } = new List<uint>();
+
+        public List<AutoBuffRule> BuffRules { get; set; } = new List<AutoBuffRule>();
+        public List<uint> AttackSkills { get; set; } = new List<uint>();
+        public List<uint> FarmMobIds { get; set; } = new List<uint>();
+
+        // Metas de combate, área e voo
         public bool AutoMobPull { get; set; } = false;
         public float MobPullRadius { get; set; } = 22f;
-
         public bool AutoDefend { get; set; } = true;
         public float AggroDetectRadius { get; set; } = 16f;
 
@@ -38,18 +45,9 @@ namespace Full_Bot
         public float AreaCenterZ { get; set; } = 0f;
         public float AreaRadius { get; set; } = 45f;
 
-        public bool UseFlightForLongDistance { get; set; } = true;
+        public bool UseFlightForLongDistance { get; set; } = false;
         public float FlyMinDistance { get; set; } = 60f;
         public int FlyAltitude { get; set; } = 25;
-
-        // Loot, buffs, skills e mobs
-        public LootFilterMode LootMode { get; set; } = LootFilterMode.SomenteMoedas;
-        public float LootRadius { get; set; } = 6.0f;
-        public List<uint> CollectItemIds { get; set; } = new List<uint>();
-
-        public List<AutoBuffRule> BuffRules { get; set; } = new List<AutoBuffRule>();
-        public List<uint> AttackSkills { get; set; } = new List<uint>();
-        public List<uint> FarmMobIds { get; set; } = new List<uint>();
     }
 
     public static class ProfileManager
@@ -79,18 +77,6 @@ namespace Full_Bot
                     HelpAlliesInQuest = true,
                     Role = "Solo",
                     MaxLeaderDistance = 100f,
-                    AutoMobPull = false,
-                    MobPullRadius = 22f,
-                    AutoDefend = true,
-                    AggroDetectRadius = 16f,
-                    HasAreaCenter = false,
-                    AreaCenterX = 0f,
-                    AreaCenterY = 0f,
-                    AreaCenterZ = 0f,
-                    AreaRadius = 45f,
-                    UseFlightForLongDistance = true,
-                    FlyMinDistance = 60f,
-                    FlyAltitude = 25,
                     LootMode = LootFilterMode.SomenteMoedas,
                     LootRadius = 6.0f,
                     CollectItemIds = new List<uint>(),

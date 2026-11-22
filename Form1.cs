@@ -7,16 +7,36 @@ namespace Full_Bot
 {
     public partial class Form1 : Form
     {
-        private const string ConfigJsonPath = @"Config\config.json";
+        private const string ConfigJsonPath = @"Config\config.CT";
         private readonly Dictionary<int, TabPage> _clientTabs = new Dictionary<int, TabPage>();
         private readonly Dictionary<int, ClientPanel> _clientPanels = new Dictionary<int, ClientPanel>();
+        private ToolStrip _modulesStrip;
 
         public Form1()
         {
             InitializeComponent();
+            AttachModulesStrip();
             SyncMultiClients();
             BotHub.PulseAll();
             RefreshOverviewAndPanels();
+        }
+
+        private void AttachModulesStrip()
+        {
+            if (_modulesStrip != null) return;
+
+            _modulesStrip = BotHub.CreateDefaultModulesStrip(() =>
+            {
+                if (tabClients.SelectedTab != null && tabClients.SelectedTab.Tag is int selectedPid)
+                {
+                    if (_clientPanels.TryGetValue(selectedPid, out var panel))
+                        return panel?.Bot?.Player?.Id ?? 0u;
+                }
+                return 0u;
+            }, this);
+
+            _modulesStrip.Dock = DockStyle.Top;
+            Controls.Add(_modulesStrip);
         }
 
         private void tmrUpdate_Tick(object sender, EventArgs e)

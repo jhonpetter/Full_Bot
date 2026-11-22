@@ -25,12 +25,16 @@ namespace Full_Bot
     {
         public List<BuffEntryConfig> Buffs { get; set; } = new List<BuffEntryConfig>();
 
-        // Solo (1.1 e 1.3)
+        // Estilo de combate e conjuração do personagem
+        public CombatArchetype Archetype { get; set; } = CombatArchetype.Fisico;
+        public CombatCasterKind CasterKind { get; set; } = CombatCasterKind.PhysicalOrArcher;
+
+        // Solo
         public bool SoloBuffEnabled { get; set; } = true;
         public bool OnlyBuffWhenNotKillingMob { get; set; } = true;
         public float SoloSafeDistanceFromMobs { get; set; } = 18.0f;
 
-        // Grupo (1.2 e 1.3)
+        // Grupo
         public bool GroupBuffEnabled { get; set; } = true;
         public bool GroupGatherNearLeader { get; set; } = true;
         public float GroupGatherMinDistanceToLeader { get; set; } = 6.0f;
@@ -47,7 +51,7 @@ namespace Full_Bot
 
         public static string GetConfigFilePath(string charName)
         {
-            string folder = Path.Combine("Configs", "Buffs");
+            string folder = Path.Combine("Config", "Buffs");
             if (!Directory.Exists(folder))
                 Directory.CreateDirectory(folder);
 

@@ -14,6 +14,7 @@ namespace Full_Bot
         private readonly Action _onSaved;
 
         private CheckBox chkSoloEnabled, chkOnlyNotKilling, chkGroupEnabled, chkGatherLeader;
+        private ComboBox cmbCasterKind, cmbArchetype;
         private TextBox txtSoloSafeDist, txtGatherMinDist, txtSyncWait, txtCooldown;
         private ListBox lstBuffs;
         private TextBox txtBuffName, txtSkillId, txtIconId;
@@ -29,8 +30,8 @@ namespace Full_Bot
                 _config.Buffs = new List<BuffEntryConfig>();
             _onSaved = onSaved;
 
-            Text = $"Configurações de Buffs - {_charName}";
-            Size = new Size(540, 520);
+            Text = $"Configurações de Buffs e Classe - {_charName}";
+            Size = new Size(545, 550);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
@@ -42,61 +43,78 @@ namespace Full_Bot
 
         private void BuildUi()
         {
-            chkSoloEnabled = new CheckBox { Location = new Point(14, 14), Size = new Size(140, 22), Text = "Buff Solo Ativo" };
-            chkOnlyNotKilling = new CheckBox { Location = new Point(160, 14), Size = new Size(210, 22), Text = "Só Buffar Fora de Batalha" };
-            var lblSafe = new Label { Location = new Point(375, 16), Size = new Size(85, 20), Text = "Dist. Mob (m):" };
-            txtSoloSafeDist = new TextBox { Location = new Point(462, 13), Size = new Size(56, 22) };
+            var lblCaster = new Label { Location = new Point(14, 15), Size = new Size(115, 20), Text = "Tipo de Ataque:" };
+            cmbCasterKind = new ComboBox { Location = new Point(132, 12), Size = new Size(195, 24), DropDownStyle = ComboBoxStyle.DropDownList };
+            cmbCasterKind.Items.AddRange(new object[]
+            {
+                "Físico / Arqueiro (AutoAttack)",
+                "Mágico - Mago/Sacerdote (Só Skills)"
+            });
 
-            chkGroupEnabled = new CheckBox { Location = new Point(14, 42), Size = new Size(140, 22), Text = "Buff Grupo Ativo" };
-            chkGatherLeader = new CheckBox { Location = new Point(160, 42), Size = new Size(175, 22), Text = "Juntar Perto do Líder" };
-            var lblMinLeader = new Label { Location = new Point(340, 44), Size = new Size(118, 20), Text = "Dist. Mín. Líder (m):" };
-            txtGatherMinDist = new TextBox { Location = new Point(462, 41), Size = new Size(56, 22) };
+            var lblArch = new Label { Location = new Point(335, 15), Size = new Size(62, 20), Text = "Alcance:" };
+            cmbArchetype = new ComboBox { Location = new Point(399, 12), Size = new Size(125, 24), DropDownStyle = ComboBoxStyle.DropDownList };
+            cmbArchetype.Items.AddRange(new object[]
+            {
+                "Físico (Perto)",
+                "Distância (Mag/Arq)"
+            });
 
-            var lblSync = new Label { Location = new Point(14, 72), Size = new Size(135, 20), Text = "Aguardar Grupo (s):" };
-            txtSyncWait = new TextBox { Location = new Point(150, 69), Size = new Size(65, 22) };
+            chkSoloEnabled = new CheckBox { Location = new Point(14, 44), Size = new Size(140, 22), Text = "Buff Solo Ativo" };
+            chkOnlyNotKilling = new CheckBox { Location = new Point(160, 44), Size = new Size(210, 22), Text = "Só Buffar Fora de Batalha" };
+            var lblSafe = new Label { Location = new Point(375, 46), Size = new Size(85, 20), Text = "Dist. Mob (m):" };
+            txtSoloSafeDist = new TextBox { Location = new Point(462, 43), Size = new Size(62, 22) };
 
-            var lblCd = new Label { Location = new Point(235, 72), Size = new Size(125, 20), Text = "Cooldown Cast (s):" };
-            txtCooldown = new TextBox { Location = new Point(362, 69), Size = new Size(65, 22) };
+            chkGroupEnabled = new CheckBox { Location = new Point(14, 72), Size = new Size(140, 22), Text = "Buff Grupo Ativo" };
+            chkGatherLeader = new CheckBox { Location = new Point(160, 72), Size = new Size(175, 22), Text = "Juntar Perto do Líder" };
+            var lblMinLeader = new Label { Location = new Point(340, 74), Size = new Size(118, 20), Text = "Dist. Mín. Líder (m):" };
+            txtGatherMinDist = new TextBox { Location = new Point(462, 71), Size = new Size(62, 22) };
 
-            lstBuffs = new ListBox { Location = new Point(14, 102), Size = new Size(504, 130) };
+            var lblSync = new Label { Location = new Point(14, 102), Size = new Size(135, 20), Text = "Aguardar Grupo (s):" };
+            txtSyncWait = new TextBox { Location = new Point(150, 99), Size = new Size(65, 22) };
+
+            var lblCd = new Label { Location = new Point(235, 102), Size = new Size(125, 20), Text = "Cooldown Cast (s):" };
+            txtCooldown = new TextBox { Location = new Point(362, 99), Size = new Size(65, 22) };
+
+            lstBuffs = new ListBox { Location = new Point(14, 132), Size = new Size(510, 125) };
             lstBuffs.SelectedIndexChanged += (s, e) => PopulateEditorFromSelected();
 
-            var lblName = new Label { Location = new Point(14, 244), Size = new Size(55, 20), Text = "Nome:" };
-            txtBuffName = new TextBox { Location = new Point(72, 241), Size = new Size(145, 22) };
+            var lblName = new Label { Location = new Point(14, 268), Size = new Size(55, 20), Text = "Nome:" };
+            txtBuffName = new TextBox { Location = new Point(72, 265), Size = new Size(145, 22) };
 
-            var lblSkill = new Label { Location = new Point(226, 244), Size = new Size(55, 20), Text = "Skill ID:" };
-            txtSkillId = new TextBox { Location = new Point(284, 241), Size = new Size(85, 22) };
+            var lblSkill = new Label { Location = new Point(226, 268), Size = new Size(55, 20), Text = "Skill ID:" };
+            txtSkillId = new TextBox { Location = new Point(284, 265), Size = new Size(85, 22) };
 
-            var lblIcon = new Label { Location = new Point(378, 244), Size = new Size(55, 20), Text = "Icon ID:" };
-            txtIconId = new TextBox { Location = new Point(436, 241), Size = new Size(82, 22) };
+            var lblIcon = new Label { Location = new Point(378, 268), Size = new Size(55, 20), Text = "Icon ID:" };
+            txtIconId = new TextBox { Location = new Point(436, 265), Size = new Size(88, 22) };
 
-            var lblType = new Label { Location = new Point(14, 276), Size = new Size(85, 20), Text = "Aplicação:" };
-            cmbTargetType = new ComboBox { Location = new Point(102, 273), Size = new Size(210, 24), DropDownStyle = ComboBoxStyle.DropDownList };
+            var lblType = new Label { Location = new Point(14, 300), Size = new Size(85, 20), Text = "Aplicação:" };
+            cmbTargetType = new ComboBox { Location = new Point(102, 297), Size = new Size(210, 24), DropDownStyle = ComboBoxStyle.DropDownList };
             cmbTargetType.Items.AddRange(new object[] { "Sem Target (Self / AoE)", "Por Target (Inclui Self)" });
 
-            chkIncludeSelf = new CheckBox { Location = new Point(320, 274), Size = new Size(105, 22), Text = "Incluir Self" };
-            chkBuffActive = new CheckBox { Location = new Point(430, 274), Size = new Size(90, 22), Text = "Ativo" };
+            chkIncludeSelf = new CheckBox { Location = new Point(320, 298), Size = new Size(105, 22), Text = "Incluir Self" };
+            chkBuffActive = new CheckBox { Location = new Point(430, 298), Size = new Size(95, 22), Text = "Ativo" };
 
-            btnAddOrUpdate = new Button { Location = new Point(14, 310), Size = new Size(245, 30), Text = "Adicionar / Atualizar Buff" };
+            btnAddOrUpdate = new Button { Location = new Point(14, 334), Size = new Size(250, 30), Text = "Adicionar / Atualizar Buff" };
             btnAddOrUpdate.Click += (s, e) => AddOrUpdateBuff();
 
-            btnRemove = new Button { Location = new Point(268, 310), Size = new Size(250, 30), Text = "Remover Selecionado" };
+            btnRemove = new Button { Location = new Point(274, 334), Size = new Size(250, 30), Text = "Remover Selecionado" };
             btnRemove.Click += (s, e) => RemoveSelectedBuff();
 
             btnSave = new Button
             {
-                Location = new Point(14, 425),
-                Size = new Size(245, 36),
-                Text = "Salvar Buffs (JSON)",
+                Location = new Point(14, 455),
+                Size = new Size(250, 36),
+                Text = "Salvar Buffs e Classe (JSON)",
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold)
             };
             btnSave.Click += (s, e) => SaveConfig();
 
-            btnClose = new Button { Location = new Point(268, 425), Size = new Size(250, 36), Text = "Fechar" };
+            btnClose = new Button { Location = new Point(274, 455), Size = new Size(250, 36), Text = "Fechar" };
             btnClose.Click += (s, e) => Close();
 
             Controls.AddRange(new Control[]
             {
+                lblCaster, cmbCasterKind, lblArch, cmbArchetype,
                 chkSoloEnabled, chkOnlyNotKilling, lblSafe, txtSoloSafeDist,
                 chkGroupEnabled, chkGatherLeader, lblMinLeader, txtGatherMinDist,
                 lblSync, txtSyncWait, lblCd, txtCooldown,
@@ -109,6 +127,9 @@ namespace Full_Bot
 
         private void LoadValues()
         {
+            cmbCasterKind.SelectedIndex = _config.CasterKind == CombatCasterKind.MagicCaster ? 1 : 0;
+            cmbArchetype.SelectedIndex = _config.Archetype == CombatArchetype.MagicoArqueiro ? 1 : 0;
+
             chkSoloEnabled.Checked = _config.SoloBuffEnabled;
             chkOnlyNotKilling.Checked = _config.OnlyBuffWhenNotKillingMob;
             txtSoloSafeDist.Text = _config.SoloSafeDistanceFromMobs.ToString(CultureInfo.InvariantCulture);
@@ -193,6 +214,14 @@ namespace Full_Bot
 
         private void SaveConfig()
         {
+            _config.CasterKind = cmbCasterKind.SelectedIndex == 1
+                ? CombatCasterKind.MagicCaster
+                : CombatCasterKind.PhysicalOrArcher;
+
+            _config.Archetype = cmbArchetype.SelectedIndex == 1
+                ? CombatArchetype.MagicoArqueiro
+                : CombatArchetype.Fisico;
+
             _config.SoloBuffEnabled = chkSoloEnabled.Checked;
             _config.OnlyBuffWhenNotKillingMob = chkOnlyNotKilling.Checked;
             _config.SoloSafeDistanceFromMobs = ParseFloat(txtSoloSafeDist.Text, 18f);

@@ -116,7 +116,7 @@ namespace Full_Bot
 
         public static string GetConfigFilePath(string charName)
         {
-            string folder = Path.Combine("Configs", "SelfCultivation");
+            string folder = Path.Combine("Config", "SelfCultivation");
             if (!Directory.Exists(folder))
                 Directory.CreateDirectory(folder);
 
