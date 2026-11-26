@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace Full_Bot
@@ -27,9 +27,9 @@ namespace Full_Bot
             get
             {
                 uint pBase = _player.Base;
-                if (pBase == 0) return 0;
-                uint off = _mem.GetFirstLocalOffset("buff_count", 0x398);
-                return _mem.ReadUInt(pBase + off);
+                if (pBase == 0u) return 0u;
+
+                return _mem.ReadUInt(pBase + _mem.GetNodeOffset("buff_count"));
             }
         }
 
@@ -37,35 +37,32 @@ namespace Full_Bot
         {
             var list = new List<BuffInfo>();
             uint pBase = _player.Base;
-            if (pBase == 0) return list;
+            if (pBase == 0u) return list;
 
             uint count = Count;
-            if (count == 0 || count > MaxBuffsSafety) return list;
+            if (count == 0u || count > MaxBuffsSafety) return list;
 
-            uint buffArrayOff = _mem.GetFirstLocalOffset("buff_array", 0x390);
-            uint arrayPtr = _mem.ReadUInt(pBase + buffArrayOff);
-            if (arrayPtr == 0) return list;
+            uint arrayPtr = _mem.ReadUInt(pBase + _mem.GetNodeOffset("buff_array"));
+            if (arrayPtr == 0u) return list;
 
             var buffItemNode = _mem.GetNode("buff_icon_id-index-mul-12") ?? _mem.GetNode("buff_icon_id");
-            uint timerOff = _mem.GetFirstLocalOffset("buff_timer", 0x02);
+            if (buffItemNode == null) return list;
 
-            for (uint i = 0; i < count; i++)
+            uint timerOff = _mem.GetNodeOffset("buff_timer");
+
+            for (uint i = 0u; i < count; i++)
             {
-                uint delta = buffItemNode != null ? buffItemNode.EvaluateFormula(i) : (i * 0x12u);
-                uint itemAddr = arrayPtr + delta;
-
+                uint itemAddr = arrayPtr + buffItemNode.EvaluateFormula(i);
                 list.Add(new BuffInfo
                 {
                     IconId = _mem.ReadUShort(itemAddr),
-                    Timer = _mem.ReadUInt(itemAddr + timerOff)
+                    Timer = timerOff > 0u ? _mem.ReadUInt(itemAddr + timerOff) : 0u
                 });
             }
+
             return list;
         }
 
-        public bool HasBuff(ushort iconId)
-        {
-            return GetActiveBuffs().Any(b => b.IconId == iconId);
-        }
+        public bool HasBuff(ushort iconId) => GetActiveBuffs().Any(b => b.IconId == iconId);
     }
 }

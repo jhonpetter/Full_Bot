@@ -7,13 +7,10 @@ mov ebp, esp
 push ebx
 push esi
 
-mov eax, [0x00E3F0E0]
-test eax, eax
-je ExitFunc
-mov ebx, [eax+0x14]
+mov ebx, {TIME_HIT}
 
-mov ecx, 0x00E12D64
 push 0x0A
+mov ecx, 0x00E12D64
 call 0x0098E9B0
 mov esi, eax
 test esi, esi

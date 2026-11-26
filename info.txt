@@ -1,0 +1,19 @@
+﻿itens (1 - drops; 2 - matts, 3 - moedas)
+mob status  (1 - Passivo; 2 - Ataque físico; 3 - Ataque mágico; 4 - Morto; 5 - Em movimento)
+function target (2 - target select, 23 - talk target dialogo)
+npc inventario max 32, bags 8
+falta aprender skill
+falta craftar item
+
+//Fechar janela de dialogo com npc
+[ENABLE]
+// 1. Zera DialogShow: [[[[00E39F5C] + 1C] + 14] + 8] + 69C] + 90 = 0 esta em "GameUi_DialogShow"
+[[[[[00E39F5C]+1C]+14]+8]+69C]+90:
+  db 00
+
+// 2. Zera PlayerInDialog: [[[00E39F5C] + 1C] + 2C] + E82 = 0 esta em "player_dialog_open"
+[[[00E39F5C]+1C]+2C]+E82:
+  db 00
+
+[DISABLE]
+

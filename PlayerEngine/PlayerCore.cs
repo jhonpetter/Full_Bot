@@ -1,18 +1,51 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 
 namespace Full_Bot
 {
-    public class PlayerCore //PlayerCore
+    public partial class PlayerCore
     {
         private readonly MemoryProcess _mem;
         private readonly AsmRunner _asm;
+
+        private PlayerBuffs _buffs;
+        private PlayerFriends _friends;
+        private PlayerInventory _inventory;
+        private PartyCore _partyCore;
+        private PlayerPets _pets;
+        private PlayerSkills _skills;
+        private WorldEntities _world;
+        private TasksQuestActive _activeQuests;
+        private TasksQuestNews _newsQuests;
 
         public PlayerCore(MemoryProcess mem, AsmRunner asm)
         {
             _mem = mem ?? throw new ArgumentNullException(nameof(mem));
             _asm = asm ?? throw new ArgumentNullException(nameof(asm));
+        }
+
+        public void AttachModules(
+            PlayerBuffs buffs = null,
+            PlayerFriends friends = null,
+            PlayerInventory inventory = null,
+            PartyCore partyCore = null,
+            PlayerPets pets = null,
+            PlayerSkills skills = null,
+            WorldEntities world = null,
+            TasksQuestActive activeQuests = null,
+            TasksQuestNews newsQuests = null)
+        {
+            _buffs = buffs ?? _buffs;
+            _friends = friends ?? _friends;
+            _inventory = inventory ?? _inventory;
+            _partyCore = partyCore ?? _partyCore;
+            _pets = pets ?? _pets;
+            _skills = skills ?? _skills;
+            _world = world ?? _world;
+            _activeQuests = activeQuests ?? _activeQuests;
+            _newsQuests = newsQuests ?? _newsQuests;
         }
 
         public uint Base
@@ -29,46 +62,14 @@ namespace Full_Bot
 
                 var baseNode = _mem.GetNode("base_address") ?? _mem.GetNode("base_ptr_raw");
                 uint baseAddr = _mem.GetNodeBaseAddress(baseNode);
-                uint gameRunOff = _mem.GetFirstLocalOffset("struct_base", 0x1C);
-                uint hostPlayerOff = _mem.GetFirstLocalOffset("player_struct", 0x2C);
+                if (baseAddr == 0u) return 0u;
+
+                uint gameRunOff = _mem.GetFirstLocalOffset("struct_base");
+                uint hostPlayerOff = _mem.GetFirstLocalOffset("player_struct");
+                if (gameRunOff == 0u && hostPlayerOff == 0u) return 0u;
+
                 return _mem.ResolvePointer(baseAddr, gameRunOff, hostPlayerOff);
             }
-        }
-
-        private uint ReadPlayerUInt(string nodeKey, string altPath = null)
-        {
-            uint pBase = Base;
-            if (pBase == 0) return 0;
-
-            var node = _mem.GetNode(nodeKey) ?? (!string.IsNullOrWhiteSpace(altPath) ? _mem.GetNodeByPath(altPath) : null);
-            var local = node?.GetLocalOffsetsUInt();
-            if (local == null || local.Length == 0) return 0;
-
-            return _mem.ReadUInt(pBase + local[0]);
-        }
-
-        private ushort ReadPlayerUShort(string nodeKey, string altPath = null)
-        {
-            uint pBase = Base;
-            if (pBase == 0) return 0;
-
-            var node = _mem.GetNode(nodeKey) ?? (!string.IsNullOrWhiteSpace(altPath) ? _mem.GetNodeByPath(altPath) : null);
-            var local = node?.GetLocalOffsetsUInt();
-            if (local == null || local.Length == 0) return 0;
-
-            return _mem.ReadUShort(pBase + local[0]);
-        }
-
-        private float ReadPlayerFloat(string nodeKey, string altPath = null)
-        {
-            uint pBase = Base;
-            if (pBase == 0) return 0f;
-
-            var node = _mem.GetNode(nodeKey) ?? (!string.IsNullOrWhiteSpace(altPath) ? _mem.GetNodeByPath(altPath) : null);
-            var local = node?.GetLocalOffsetsUInt();
-            if (local == null || local.Length == 0) return 0f;
-
-            return _mem.ReadFloat(pBase + local[0]);
         }
 
         // --- ATRIBUTOS VITAIS ---
@@ -80,16 +81,7 @@ namespace Full_Bot
                 uint pBase = Base;
                 if (pBase == 0) return pid > 0 ? $"PID: {pid} (Deslogado)" : "Deslogado";
 
-                var nameNode = _mem.GetNode("player_name");
-                var local = nameNode?.GetLocalOffsetsUInt();
-                if (local == null || local.Length == 0)
-                    return pid > 0 ? $"PID: {pid}" : "Sem Nome";
-
-                uint ptr = _mem.ReadUInt(pBase + local[0]);
-                if (local.Length > 1 && local[1] != 0 && ptr != 0)
-                    ptr = _mem.ReadUInt(ptr + local[1]);
-
-                string n = _mem.ReadUnicodeString(ptr, 32);
+                string n = _mem.ReadUnicodeStringByNode("player_name", 32);
                 if (string.IsNullOrWhiteSpace(n))
                     return pid > 0 ? $"PID: {pid}" : "Sem Nome";
 
@@ -97,47 +89,96 @@ namespace Full_Bot
             }
         }
 
-        public string CurrentRegionName
-        {
-            get
-            {
-                var locNode = _mem.GetNode("current_location");
-                if (locNode == null) return string.Empty;
+        public string CurrentRegionName => _mem.ReadUnicodeStringByNode("current_location", 64);
 
-                uint strAddr = _mem.ResolveNodeAddress(locNode);
-                return _mem.ReadUnicodeString(strAddr, 64);
-            }
-        }
-
-        public uint Id => ReadPlayerUInt("player_id");
-        public uint Level => ReadPlayerUInt("player_level");
-        public uint HP => ReadPlayerUInt("player_hp");
-        public uint HPMax => ReadPlayerUInt("player_hp_max");
-        public uint MP => ReadPlayerUInt("player_mp");
-        public uint MPMax => ReadPlayerUInt("player_mp_max");
-        public uint DefFisica => ReadPlayerUInt("player_phys_def");
-        public ushort Idle => ReadPlayerUShort("player_idle");
-        public ushort ActionsCount => ReadPlayerUShort("player_actions_count");
-        public uint LoggedTime => ReadPlayerUInt("player_logged_time");
-        public uint MoveMode => ReadPlayerUInt("player_move_mode");
-        public float SpeedWalk => ReadPlayerFloat("player_speed_walk");
-        public float SpeedSwim => ReadPlayerFloat("player_speed_swim");
-        public float SpeedFly => ReadPlayerFloat("player_speed_fly");
+        public uint Id => _mem.ReadUIntFromNodeAtBase(Base, "player_id");
+        public uint Level => _mem.ReadUIntFromNodeAtBase(Base, "player_level");
+        public uint HP => _mem.ReadUIntFromNodeAtBase(Base, "player_hp");
+        public uint HPMax => _mem.ReadUIntFromNodeAtBase(Base, "player_hp_max");
+        public uint MP => _mem.ReadUIntFromNodeAtBase(Base, "player_mp");
+        public uint MPMax => _mem.ReadUIntFromNodeAtBase(Base, "player_mp_max");
+        public uint DefFisica => _mem.ReadUIntFromNodeAtBase(Base, "player_phys_def");
+        public ushort Idle => _mem.ReadUShortFromNodeAtBase(Base, "player_idle");
+        public ushort ActionsCount => _mem.ReadUShortFromNodeAtBase(Base, "player_actions_count");
+        public uint LoggedTime => _mem.ReadUIntFromNodeAtBase(Base, "player_logged_time");
+        public uint MoveMode => _mem.ReadUIntFromNodeAtBase(Base, "player_move_mode");
+        public float SpeedWalk => _mem.ReadFloatFromNodeAtBase(Base, "player_speed_walk");
+        public float SpeedSwim => _mem.ReadFloatFromNodeAtBase(Base, "player_speed_swim");
+        public float SpeedFly => _mem.ReadFloatFromNodeAtBase(Base, "player_speed_fly");
 
         // --- COORDENADAS NATIVAS BRUTAS ---
-        public float X => ReadPlayerFloat("player_pos_x");
-        public float Y => ReadPlayerFloat("player_pos_y");
-        public float Z => ReadPlayerFloat("player_pos_z");
+        public float X => _mem.ReadFloatFromNodeAtBase(Base, "player_pos_x");
+        public float Y => _mem.ReadFloatFromNodeAtBase(Base, "player_pos_y");
+        public float Z => _mem.ReadFloatFromNodeAtBase(Base, "player_pos_z");
 
-        // Conversão apenas para exibição visual na tela (minimapa)
         public static float ToDisplayX(float rawX) => (rawX / 10f) + 400f;
         public static float ToDisplayY(float rawY) => rawY / 10f;
         public static float ToDisplayZ(float rawZ) => (rawZ / 10f) + 550f;
 
+        // --- ACESSO UNIFICADO AOS MÓDULOS DO PLAYER ---
+        public List<ActiveQuestInfo> GetActiveQuests()
+            => _activeQuests?.GetActiveQuestTree() ?? new List<ActiveQuestInfo>();
+
+        public List<ActiveQuestInfo> GetAllActiveQuestsFlat()
+            => _activeQuests?.GetActiveQuests() ?? new List<ActiveQuestInfo>();
+
+        public List<AvailableQuestInfo> GetNewsQuests(int maxEntries = 60)
+            => _newsQuests?.GetAvailableQuests(maxEntries) ?? new List<AvailableQuestInfo>();
+
+        public List<FriendInfo> GetFriends()
+            => _friends?.GetFriends() ?? new List<FriendInfo>();
+
+        public bool IsInParty()
+            => _partyCore != null && _partyCore.IsInParty();
+
+        public List<PartyMemberInfo> GetPartyMembers()
+            => _partyCore?.GetMembers() ?? new List<PartyMemberInfo>();
+
+        public bool IsPetSummoned => _pets != null && _pets.IsPetSummoned;
+
+        public List<PetSlotInfo> GetPets()
+            => _pets?.GetPetSlots() ?? new List<PetSlotInfo>();
+
+        public List<InventoryItemInfo> GetBagItems()
+            => _inventory?.GetBagItems() ?? new List<InventoryItemInfo>();
+
+        public List<InventoryItemInfo> GetEquippedItems()
+            => _inventory?.GetEquippedItems() ?? new List<InventoryItemInfo>();
+
+        public List<InventoryItemInfo> GetQuestItems()
+            => _inventory?.GetQuestItems() ?? new List<InventoryItemInfo>();
+
+        public List<BuffInfo> GetBuffs()
+            => _buffs?.GetActiveBuffs() ?? new List<BuffInfo>();
+
+        public List<SkillInfo> GetSkills()
+            => _skills?.GetLearnedSkills() ?? new List<SkillInfo>();
+
+        // --- ENTIDADES AO REDOR ---
+        public List<WorldEntityInfo> GetNearbyPlayers()
+        {
+            var list = _world?.GetNearbyPlayers() ?? new List<WorldEntityInfo>();
+            uint selfId = Id;
+            return selfId == 0u ? list : list.Where(p => p.ServerId != selfId).ToList();
+        }
+
+        public List<WorldEntityInfo> GetNearbyNpcs()
+            => (_world?.GetMobsAndNpcs() ?? new List<WorldEntityInfo>())
+                .Where(e => e.Type == 7)
+                .ToList();
+
+        public List<WorldEntityInfo> GetNearbyMobs()
+            => (_world?.GetMobsAndNpcs() ?? new List<WorldEntityInfo>())
+                .Where(e => e.Type == 6)
+                .ToList();
+
+        public List<DropItemInfo> GetNearbyMatts()
+            => _world?.GetGroundDrops() ?? new List<DropItemInfo>();
+
         // --- PROPRIEDADES REATIVAS (GET LÊ MEMÓRIA / SET DISPARA AÇÃO) ---
         public uint TargetId
         {
-            get => ReadPlayerUInt("player_target_id");
+            get => _mem.ReadUIntFromNodeAtBase(Base, "player_target_id");
             set => SelectTarget(value);
         }
 
@@ -155,7 +196,6 @@ namespace Full_Bot
                 ? confirmNode.GetLocalOffsetsUInt()[0]
                 : 0u;
 
-            // Garante conversão explícita para uint hex de 32 bits (ex: 2148548680 -> 0x80104048)
             uint hexAsUint = uint.Parse(serverId.ToString("X8", CultureInfo.InvariantCulture), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
 
             var vars = new Dictionary<string, uint>

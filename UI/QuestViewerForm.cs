@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -6,7 +6,7 @@ namespace Full_Bot
 {
     public class QuestViewerForm : Form
     {
-        private readonly BotController _bot;
+        private readonly PlayerSession _session;
         private readonly Timer _refreshTimer;
 
         private TabControl _tabQuests;
@@ -14,19 +14,22 @@ namespace Full_Bot
         private DataGridView _gridNews;
         private Button _btnRefreshNow;
 
-        public QuestViewerForm(BotController bot)
+        public QuestViewerForm(PlayerSession session)
         {
-            _bot = bot;
-            this.Text = $"Missões - {_bot.Player.Name} (Nv. {_bot.Player.Level})";
-            this.Size = new Size(760, 460);
-            this.StartPosition = FormStartPosition.CenterParent;
+            _session = session;
+            var p = _session?.Player;
+            Text = p != null
+                ? $"Missões - {p.Name} (Nv. {p.Level})"
+                : "Missões";
+            Size = new Size(760, 460);
+            StartPosition = FormStartPosition.CenterParent;
 
             BuildUI();
             RefreshData();
 
             _refreshTimer = new Timer { Interval = 1500, Enabled = true };
             _refreshTimer.Tick += (s, e) => RefreshData();
-            this.FormClosed += (s, e) => { _refreshTimer.Stop(); _refreshTimer.Dispose(); };
+            FormClosed += (s, e) => { _refreshTimer.Stop(); _refreshTimer.Dispose(); };
         }
 
         private void BuildUI()
@@ -42,7 +45,6 @@ namespace Full_Bot
 
             _tabQuests = new TabControl { Dock = DockStyle.Fill };
 
-            // --- ABA 1: ÁRVORE EM CASCATA PARA QUESTS ATIVAS ---
             TabPage tabActive = new TabPage("Quests Ativas (Cascata)");
             _treeActive = new TreeView
             {
@@ -55,7 +57,6 @@ namespace Full_Bot
             };
             tabActive.Controls.Add(_treeActive);
 
-            // --- ABA 2: JOURNAL NEWS QUEST (DISPONÍVEIS) ---
             TabPage tabNews = new TabPage("Quests Disponíveis (Journal)");
             _gridNews = new DataGridView
             {
@@ -76,19 +77,17 @@ namespace Full_Bot
             _tabQuests.TabPages.Add(tabActive);
             _tabQuests.TabPages.Add(tabNews);
 
-            this.Controls.Add(_tabQuests);
-            this.Controls.Add(_btnRefreshNow);
+            Controls.Add(_tabQuests);
+            Controls.Add(_btnRefreshNow);
         }
 
         private void RefreshData()
         {
-            if (_bot == null || _bot.Memory.Process.HasExited || _bot.Player.Base == 0)
+            if (_session == null || !_session.IsAlive || _session.Player == null || _session.Player.Base == 0)
                 return;
 
-            // --- 1. ATUALIZA ÁRVORE DE QUESTS ATIVAS SEM PERDER ROLAGEM NEM ESTADO EXPANDIDO ---
-            var questRoots = _bot.ActiveQuests.GetActiveQuestTree();
+            var questRoots = _session.Player.GetActiveQuests();
 
-            // Guarda quais quests o usuário recolheu manualmente e qual nó estava no topo da rolagem
             var collapsedIds = new HashSet<string>();
             SaveExpandedState(_treeActive.Nodes, collapsedIds);
             string topNodeTag = _treeActive.TopNode?.Tag as string;
@@ -97,15 +96,10 @@ namespace Full_Bot
             _treeActive.Nodes.Clear();
 
             foreach (var root in questRoots)
-            {
-                var node = BuildQuestNode(root);
-                _treeActive.Nodes.Add(node);
-            }
+                _treeActive.Nodes.Add(BuildQuestNode(root));
 
-            // Restaura o estado expandido/recolhido de cada nó
             RestoreExpandedState(_treeActive.Nodes, collapsedIds);
 
-            // Restaura exatamente a posição da barra de rolagem
             if (!string.IsNullOrEmpty(topNodeTag))
             {
                 var foundTop = FindNodeByTag(_treeActive.Nodes, topNodeTag);
@@ -114,11 +108,10 @@ namespace Full_Bot
             }
             _treeActive.EndUpdate();
 
-            // --- 2. ATUALIZA QUESTS DISPONÍVEIS (JOURNAL) SEM PERDER A ROLAGEM ---
             int firstDisplayedRow = _gridNews.FirstDisplayedScrollingRowIndex;
             int selectedRow = _gridNews.CurrentRow?.Index ?? -1;
 
-            var news = _bot.NewsQuests.GetAvailableQuests();
+            var news = _session.Player.GetNewsQuests();
             _gridNews.Rows.Clear();
 
             foreach (var nq in news)
@@ -132,7 +125,6 @@ namespace Full_Bot
                 );
             }
 
-            // Restaura a linha visível no topo da tabela
             if (firstDisplayedRow >= 0 && firstDisplayedRow < _gridNews.Rows.Count)
                 _gridNews.FirstDisplayedScrollingRowIndex = firstDisplayedRow;
 
@@ -147,13 +139,13 @@ namespace Full_Bot
 
             var node = new TreeNode($"[{q.QuestId}] {title}{statusTag}")
             {
-                Tag = $"Q_{q.QuestId}_{q.SlotIndex}" // Identificador único para manter a rolagem
+                Tag = $"Q_{q.QuestId}_{q.SlotIndex}"
             };
 
             if (q.Status == 3)
                 node.ForeColor = Color.DarkGreen;
 
-            foreach (var t in q.Targets)
+            foreach (var t in q.Targets ?? new List<QuestTargetRequirement>())
             {
                 if (t.MobId > 0)
                     node.Nodes.Add(new TreeNode($"Objetivo: Matar Mob ID {t.MobId} -> {t.MobsKilled} / {t.MobsRequired}")
@@ -177,7 +169,7 @@ namespace Full_Bot
                     Tag = $"NPC_{q.QuestId}_{q.ToNpcId}"
                 });
 
-            foreach (var child in q.Children)
+            foreach (var child in q.Children ?? new List<ActiveQuestInfo>())
                 node.Nodes.Add(BuildQuestNode(child));
 
             return node;
@@ -218,6 +210,5 @@ namespace Full_Bot
             }
             return null;
         }
-
     }
 }

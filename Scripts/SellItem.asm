@@ -1,4 +1,4 @@
-﻿; --- Scripts\SellItem.asm ---
+; --- Scripts\SellItem.asm ---
 use32
 org {ALLOC_ADDR}
 
@@ -11,17 +11,17 @@ push edi
 
 mov esi, 0x00000001
 mov eax, esi
-mov ecx, {PACKET_MGR}
+mov ecx, 0x00E12D64
 shl eax, 0x04
 mov [ebp-0x18], eax
 add eax, 0x0E
 push eax
 mov [ebp-0x1C], eax
-call {FUNC_ALLOCPACKET}
+call 0x0098E9B0
 mov [ebp-0x10], eax
 mov edi, eax
 test edi, edi
-je ExitSell
+je ExitFunc
 
 mov ecx, 0x00000025
 mov word [edi], cx
@@ -36,27 +36,27 @@ mov dword [edx+0x08], esi
 add edx, 0x0C
 mov dword [edx], {ITEM_ID}
 mov dword [edx+0x04], {BAG_SLOT}
-mov dword [edx+0x08], {AMOUNT}
+mov dword [edx+0x08], {ITEM_AMOUNT}
 mov dword [edx+0x0C], {UNIT_PRICE}
 
-mov eax, [{BASE_ADDR}]
+mov eax, [0x00E39F5C]
 test eax, eax
 je FreeBuffer
 
 mov esi, [ebp-0x10]
-mov ecx, [eax+{OFF_NETWORKOFFSET}]
+mov ecx, [eax+0x20]
 mov eax, [ebp-0x1C]
 push esi
 add eax, 0x000000A9
 push eax
 push 0x000000A9
-call {FUNC_SENDPACKET}
+call 0x00909B50
 
 FreeBuffer:
 mov ecx, [ebp-0x10]
-call {FUNC_FREEPACKET}
+call 0x0098BDF0
 
-ExitSell:
+ExitFunc:
 pop edi
 pop esi
 pop ebx

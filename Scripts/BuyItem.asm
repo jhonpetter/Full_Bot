@@ -1,4 +1,4 @@
-﻿; --- Scripts\BuyItem.asm ---
+; --- Scripts\BuyItem.asm ---
 use32
 org {ALLOC_ADDR}
 
@@ -11,15 +11,15 @@ push edi
 
 mov ebx, 0x00000001
 lea esi, [ebx+ebx*2]
-mov ecx, {PACKET_MGR}
+mov ecx, 0x00E12D64
 shl esi, 0x02
 lea eax, [esi+0x26]
 push eax
 mov [ebp-0x24], eax
-call {FUNC_ALLOCPACKET}
+call 0x0098E9B0
 mov edi, eax
 test edi, edi
-je ExitBuy
+je ExitFunc
 
 mov word [edi], 0x0025
 lea edx, [edi+0x02]
@@ -37,26 +37,26 @@ mov dword [edx+0x20], 0x00000001
 
 add edx, 0x24
 mov dword [edx], {ITEM_ID}
-mov dword [edx+0x04], {SHOP_SLOT}
-mov dword [edx+0x08], {AMOUNT}
+mov dword [edx+0x04], {NPC_SLOT}
+mov dword [edx+0x08], {ITEM_AMOUNT}
 
-mov eax, [{BASE_ADDR}]
+mov eax, [0x00E39F5C]
 test eax, eax
 je FreeBuffer
 
-mov ecx, [eax+{OFF_NETWORKOFFSET}]
+mov ecx, [eax+0x20]
 mov eax, [ebp-0x24]
 push edi
 add eax, 0x000000A9
 push eax
 push 0x000000A9
-call {FUNC_SENDPACKET}
+call 0x00909B50
 
 FreeBuffer:
 mov ecx, edi
-call {FUNC_FREEPACKET}
+call 0x0098BDF0
 
-ExitBuy:
+ExitFunc:
 pop edi
 pop esi
 pop ebx

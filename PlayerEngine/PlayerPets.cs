@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace Full_Bot
 {
@@ -28,14 +28,12 @@ namespace Full_Bot
             get
             {
                 uint pBase = _player.Base;
-                if (pBase == 0) return false;
+                if (!MemoryProcess.IsValidPointer(pBase)) return false;
 
-                uint petBaseOff = _mem.GetFirstLocalOffset("pet_base", 0x14E8);
-                uint petBase = _mem.ReadUInt(pBase + petBaseOff);
-                if (petBase == 0) return false;
+                uint petBase = _mem.ReadUIntFromNodeAtBase(pBase, "pet_base");
+                if (!MemoryProcess.IsValidPointer(petBase)) return false;
 
-                uint summonedOff = _mem.GetFirstLocalOffset("pet_summoned", 0x08);
-                return _mem.ReadUInt(petBase + summonedOff) != 0xFFFFFFFF;
+                return _mem.ReadUIntFromNodeAtBase(petBase, "pet_summoned") != 0xFFFFFFFFu;
             }
         }
 
@@ -43,38 +41,31 @@ namespace Full_Bot
         {
             var list = new List<PetSlotInfo>();
             uint pBase = _player.Base;
-            if (pBase == 0) return list;
+            if (!MemoryProcess.IsValidPointer(pBase)) return list;
 
-            uint petBaseOff = _mem.GetFirstLocalOffset("pet_base", 0x14E8);
-            uint petBase = _mem.ReadUInt(pBase + petBaseOff);
-            if (petBase == 0) return list;
+            uint petBase = _mem.ReadUIntFromNodeAtBase(pBase, "pet_base");
+            if (!MemoryProcess.IsValidPointer(petBase)) return list;
 
             var slotNode = _mem.GetNode("pet_slot_ptr-index-mul-10-add-10");
-            uint arrayBaseOff = _mem.GetFirstLocalOffset("pet_slot_ptr-index-mul-10-add-10", 0x10);
+            if (slotNode == null) return list;
 
-            var nameNode = _mem.GetNode("pet_name");
-            var nameOffs = nameNode?.GetLocalOffsetsUInt() ?? new uint[] { 0x34, 0x00 };
-            uint typeOff = _mem.GetFirstLocalOffset("pet_type", 0x18);
-            uint lvlOff = _mem.GetFirstLocalOffset("pet_level", 0x24);
+            uint typeOff = _mem.GetNodeOffset("pet_type");
+            uint lvlOff = _mem.GetNodeOffset("pet_level");
 
             for (int i = 0; i < MaxPetSlots; i++)
             {
-                uint delta = slotNode != null ? slotNode.EvaluateFormula((uint)i) : (uint)(i * 4);
-                uint slotPtr = _mem.ReadUInt(petBase + arrayBaseOff + delta);
-                if (slotPtr == 0) continue;
-
-                uint namePtr = _mem.ReadUInt(slotPtr + nameOffs[0]);
-                for (int n = 1; n < nameOffs.Length && namePtr != 0; n++)
-                    namePtr = _mem.ReadUInt(namePtr + nameOffs[n]);
+                uint slotPtr = _mem.ReadUInt(petBase + slotNode.EvaluateFormula((uint)i));
+                if (!MemoryProcess.IsValidPointer(slotPtr)) continue;
 
                 list.Add(new PetSlotInfo
                 {
                     Slot = i,
-                    Name = _mem.ReadUnicodeString(namePtr, 32),
+                    Name = _mem.ReadUnicodeStringByChain(slotPtr, "pet_name", 32),
                     Type = _mem.ReadUInt(slotPtr + typeOff),
                     Level = _mem.ReadUInt(slotPtr + lvlOff)
                 });
             }
+
             return list;
         }
     }

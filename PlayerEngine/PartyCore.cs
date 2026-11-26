@@ -1,9 +1,8 @@
-﻿using System;
 using System.Collections.Generic;
 
 namespace Full_Bot
 {
-    /*public class PartyMemberInfo
+    public class PartyMemberInfo
     {
         public int Index { get; set; }
         public uint Id { get; set; }
@@ -31,105 +30,91 @@ namespace Full_Bot
             }
             return false;
         }
-    }*/
+    }
 
     public class PartyCore
     {
         private const int MaxPartyMembers = 10;
         private const uint MaxMemberBuffsSafety = 128;
-        private const uint MinValidUserPtr = 0x00010000u;
-        private const uint MaxValidUserPtr = 0x7FFFFFFFu;
 
         private readonly MemoryProcess _mem;
+        private readonly PlayerCore _player;
 
-        public PartyCore(MemoryProcess mem)
+        public PartyCore(MemoryProcess mem, PlayerCore player = null)
         {
             _mem = mem;
-        }
-
-        private uint PlayerStructBase
-        {
-            get
-            {
-                var pNode = _mem.GetNode("player_struct");
-                if (pNode != null)
-                {
-                    var offs = pNode.GetOffsetsUInt();
-                    if (offs.Length > 0)
-                        return _mem.ResolvePointer(_mem.GetNodeBaseAddress(pNode), offs);
-                }
-
-                var baseNode = _mem.GetNode("base_address") ?? _mem.GetNode("base_ptr_raw");
-                uint gameRunOff = _mem.GetFirstLocalOffset("struct_base", 0x1C);
-                uint playerOff = _mem.GetFirstLocalOffset("player_struct", 0x2C);
-                return _mem.ResolvePointer(_mem.GetNodeBaseAddress(baseNode), gameRunOff, playerOff);
-            }
+            _player = player;
         }
 
         private uint PartyBase
         {
             get
             {
-                uint pStruct = PlayerStructBase;
-                if (!IsLikelyValidPointer(pStruct)) return 0;
+                uint pBase = (_player != null && _player.Base != 0u)
+                    ? _player.Base
+                    : _mem.ResolveStructBase("player_struct");
 
-                var partyNode = _mem.GetNode("party_base");
-                if (partyNode != null)
-                {
-                    var localOffs = partyNode.GetLocalOffsetsUInt();
-                    if (localOffs.Length > 0)
-                        return _mem.ResolvePointer(pStruct, localOffs);
-                }
+                if (!MemoryProcess.IsValidPointer(pBase)) return 0u;
 
-                uint partyOff = _mem.GetFirstLocalOffset("party_base", 0x7B0);
-                return _mem.ReadUInt(pStruct + partyOff);
+                uint partyBase = _mem.ReadUIntFromNodeAtBase(pBase, "party_base");
+                if (MemoryProcess.IsValidPointer(partyBase))
+                    return partyBase;
+
+                uint partyOff = _mem.GetNodeOffset("party_base");
+                return partyOff > 0u ? _mem.ReadUInt(pBase + partyOff) : 0u;
             }
         }
 
-        private static bool IsLikelyValidPointer(uint ptr)
+        private uint GetNodeOffset(string key)
         {
-            return ptr >= MinValidUserPtr && ptr <= MaxValidUserPtr;
+            var node = _mem.GetNode(key);
+            if (node == null) return 0u;
+
+            var local = node.GetLocalOffsetsUInt();
+            if (local != null && local.Length > 0)
+                return local[0];
+
+            return node.HasOwnAddressDisplacement ? node.OwnAddressDisplacement : 0u;
         }
 
-        public bool IsInParty()
-        {
-            return GetMemberCount() > 0;
-        }
+        public bool IsInParty() => GetMemberCount() > 0u;
 
         public uint GetMemberCount()
         {
             uint pBase = PartyBase;
-            if (!IsLikelyValidPointer(pBase)) return 0;
+            if (!MemoryProcess.IsValidPointer(pBase)) return 0u;
 
-            uint countOff = _mem.GetFirstLocalOffset("party_member_count", 0x18);
-            uint count = _mem.ReadUInt(pBase + countOff);
-            if (count > MaxPartyMembers) return 0;
-            return count;
+            uint count = _mem.ReadUInt(pBase + _mem.GetNodeOffset("party_member_count"));
+            return count <= MaxPartyMembers ? count : 0u;
         }
 
         private void ReadMemberBuffs(uint memberPtr, PartyMemberInfo info)
         {
-            if (!IsLikelyValidPointer(memberPtr) || info == null) return;
+            if (!MemoryProcess.IsValidPointer(memberPtr) || info == null) return;
 
-            uint buffCountOff = _mem.GetFirstLocalOffset("party_member_buff_count", 0x64);
-            uint buffArrayOff = _mem.GetFirstLocalOffset("party_member_buff_array", 0x58);
+            uint buffCount = _mem.ReadUInt(memberPtr + _mem.GetNodeOffset("party_member_buff_count"));
+            uint buffArrayPtr = _mem.ReadUInt(memberPtr + _mem.GetNodeOffset("party_member_buff_array"));
 
-            uint buffCount = _mem.ReadUInt(memberPtr + buffCountOff);
-            uint buffArrayPtr = _mem.ReadUInt(memberPtr + buffArrayOff);
-
-            if (!IsLikelyValidPointer(buffArrayPtr) || buffCount == 0 || buffCount > MaxMemberBuffsSafety)
+            if (!MemoryProcess.IsValidPointer(buffArrayPtr) || buffCount == 0u || buffCount > MaxMemberBuffsSafety)
                 return;
 
-            var buffSlotNode = _mem.GetNode("party_member_buff_icon_id-index-mul-12");
+            var buffSlotNode = _mem.GetNode("party_member_buff_icon_id-index-mul-12")
+                ?? _mem.GetNode("party_member_buff_icon_id");
+            if (buffSlotNode == null) return;
 
-            for (uint b = 0; b < buffCount; b++)
+            uint iconExtraOff = GetNodeOffset("party_member_buff_icon_id");
+
+            for (uint b = 0u; b < buffCount; b++)
             {
-                uint delta = buffSlotNode != null ? buffSlotNode.EvaluateFormula(b) : (b * 12u);
-                ushort iconId = _mem.ReadUShort(buffArrayPtr + delta);
+                uint addr = buffArrayPtr + buffSlotNode.EvaluateFormula(b) + iconExtraOff;
+                ushort iconId = _mem.ReadUShort(addr);
                 if (iconId == 0) continue;
 
-                info.BuffIconIds.Add(iconId);
-                info.BuffIds.Add(iconId);
+                if (!info.BuffIconIds.Contains(iconId))
+                    info.BuffIconIds.Add(iconId);
+
+                if (!info.BuffIds.Contains(iconId))
+                    info.BuffIds.Add(iconId);
             }
         }
 
@@ -137,48 +122,35 @@ namespace Full_Bot
         {
             var members = new List<PartyMemberInfo>();
             uint pBase = PartyBase;
-            if (!IsLikelyValidPointer(pBase)) return members;
+            if (!MemoryProcess.IsValidPointer(pBase)) return members;
 
-            uint countOff = _mem.GetFirstLocalOffset("party_member_count", 0x18);
-            uint arrayOff = _mem.GetFirstLocalOffset("party_member_array", 0x14);
+            uint count = _mem.ReadUInt(pBase + _mem.GetNodeOffset("party_member_count"));
+            uint arrayPtr = _mem.ReadUInt(pBase + _mem.GetNodeOffset("party_member_array"));
 
-            uint count = _mem.ReadUInt(pBase + countOff);
-            uint arrayPtr = _mem.ReadUInt(pBase + arrayOff);
-
-            if (!IsLikelyValidPointer(arrayPtr) || count == 0 || count > MaxPartyMembers)
+            if (!MemoryProcess.IsValidPointer(arrayPtr) || count == 0u || count > MaxPartyMembers)
                 return members;
 
-            var slotNode = _mem.GetNode("party_member_ptr-index-mul-4");
-            uint slotLocalOff = 0;
-            if (slotNode != null)
-            {
-                var sOffs = slotNode.GetLocalOffsetsUInt();
-                if (sOffs.Length > 0)
-                    slotLocalOff = sOffs[0];
-            }
-            else
-            {
-                slotLocalOff = 0x4;
-            }
+            var slotNode = _mem.GetNode("party_member_ptr-index-mul-4")
+                ?? _mem.GetNode("party_member_ptr");
+            if (slotNode == null) return members;
 
-            uint idOff = _mem.GetFirstLocalOffset("party_member_id", 0xC);
-            uint lvlOff = _mem.GetFirstLocalOffset("party_member_level", 0x10);
-            uint hpOff = _mem.GetFirstLocalOffset("party_member_hp", 0x1C);
-            uint mpOff = _mem.GetFirstLocalOffset("party_member_mp", 0x20);
-            uint hpMaxOff = _mem.GetFirstLocalOffset("party_member_hp_max", 0x24);
-            uint mpMaxOff = _mem.GetFirstLocalOffset("party_member_mp_max", 0x28);
-            uint xOff = _mem.GetFirstLocalOffset("party_member_pos_x", 0x34);
-            uint yOff = _mem.GetFirstLocalOffset("party_member_pos_y", 0x38);
-            uint zOff = _mem.GetFirstLocalOffset("party_member_pos_z", 0x3C);
+            uint idOff = _mem.GetNodeOffset("party_member_id");
+            uint lvlOff = _mem.GetNodeOffset("party_member_level");
+            uint hpOff = _mem.GetNodeOffset("party_member_hp");
+            uint mpOff = _mem.GetNodeOffset("party_member_mp");
+            uint hpMaxOff = _mem.GetNodeOffset("party_member_hp_max");
+            uint mpMaxOff = _mem.GetNodeOffset("party_member_mp_max");
+            uint xOff = _mem.GetNodeOffset("party_member_pos_x");
+            uint yOff = _mem.GetNodeOffset("party_member_pos_y");
+            uint zOff = _mem.GetNodeOffset("party_member_pos_z");
 
-            for (uint i = 0; i < count; i++)
+            for (uint i = 0u; i < count; i++)
             {
-                uint delta = slotNode != null ? slotNode.EvaluateFormula(i) : (i * 4u);
-                uint mPtr = _mem.ReadUInt(arrayPtr + slotLocalOff + delta);
-                if (!IsLikelyValidPointer(mPtr)) continue;
+                uint mPtr = _mem.ReadUInt(arrayPtr + slotNode.EvaluateFormula(i));
+                if (!MemoryProcess.IsValidPointer(mPtr)) continue;
 
                 uint memberId = _mem.ReadUInt(mPtr + idOff);
-                if (memberId == 0) continue;
+                if (memberId == 0u) continue;
 
                 uint hp = _mem.ReadUInt(mPtr + hpOff);
                 uint mp = _mem.ReadUInt(mPtr + mpOff);
@@ -192,8 +164,8 @@ namespace Full_Bot
                     Level = _mem.ReadUInt(mPtr + lvlOff),
                     HP = hp,
                     MP = mp,
-                    HPMax = hpMax > 0 ? hpMax : hp,
-                    MPMax = mpMax > 0 ? mpMax : mp,
+                    HPMax = hpMax > 0u ? hpMax : hp,
+                    MPMax = mpMax > 0u ? mpMax : mp,
                     X = _mem.ReadFloat(mPtr + xOff),
                     Y = _mem.ReadFloat(mPtr + yOff),
                     Z = _mem.ReadFloat(mPtr + zOff)
@@ -208,7 +180,7 @@ namespace Full_Bot
 
         public PartyMemberInfo GetMemberById(uint id)
         {
-            if (id == 0) return null;
+            if (id == 0u) return null;
             foreach (var m in GetMembers())
             {
                 if (m.Id == id) return m;

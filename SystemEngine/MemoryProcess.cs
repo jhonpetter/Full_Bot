@@ -9,6 +9,8 @@ namespace Full_Bot
 {
     public class MemoryProcess : IDisposable
     {
+        public const uint MinValidPointer = 0x00010000u;
+        public const uint MaxValidPointer = 0x7FFFFFFFu;
         private const int ProcessAllAccess = 0x1F0FFF;
 
         [DllImport("kernel32.dll", SetLastError = true)]
@@ -19,7 +21,8 @@ namespace Full_Bot
 
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool CloseHandle(IntPtr hObject);
-
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool WriteProcessMemory(IntPtr hProcess, uint lpBaseAddress, byte[] lpBuffer, int dwSize, out int lpNumberOfBytesWritten);
         public Process Process { get; }
         public IntPtr Handle { get; private set; }
         public uint ModuleBase { get; }
@@ -38,6 +41,13 @@ namespace Full_Bot
                 throw new InvalidOperationException($"MainModule indisponível para o processo '{process.ProcessName}' (PID {process.Id}).");
 
             ModuleBase = unchecked((uint)process.MainModule.BaseAddress.ToInt64());
+        }
+
+        public bool WriteByte(uint addr, byte value)
+        {
+            if (addr == 0u || Handle == IntPtr.Zero) return false;
+            byte[] buf = new byte[] { value };
+            return WriteProcessMemory(Handle, addr, buf, 1, out int written) && written == 1;
         }
 
         // --- ACESSO A NÓS DA TABELA .CT ---
@@ -85,6 +95,7 @@ namespace Full_Bot
 
             return null;
         }
+
         public CtEntryNode GetNode(string key) => Table?.Find(key);
 
         public uint GetModuleBaseAddress(string moduleName)
@@ -158,6 +169,109 @@ namespace Full_Bot
         }
 
         // --- LEITURAS DE MEMÓRIA ---
+
+        public uint ReadUIntFromNodeAtBase(uint baseAddr, string nodeKey, string altPath = null)
+        {
+            if (baseAddr == 0u || string.IsNullOrWhiteSpace(nodeKey))
+                return 0u;
+
+            var node = GetNode(nodeKey) ?? (!string.IsNullOrWhiteSpace(altPath) ? GetNodeByPath(altPath) : null);
+            var local = node?.GetLocalOffsetsUInt();
+            if (local == null || local.Length == 0)
+                return 0u;
+
+            return ReadUInt(unchecked(baseAddr + local[0]));
+        }
+
+        public ushort ReadUShortFromNodeAtBase(uint baseAddr, string nodeKey, string altPath = null)
+        {
+            if (baseAddr == 0u || string.IsNullOrWhiteSpace(nodeKey))
+                return 0;
+
+            var node = GetNode(nodeKey) ?? (!string.IsNullOrWhiteSpace(altPath) ? GetNodeByPath(altPath) : null);
+            var local = node?.GetLocalOffsetsUInt();
+            if (local == null || local.Length == 0)
+                return 0;
+
+            return ReadUShort(unchecked(baseAddr + local[0]));
+        }
+
+        public float ReadFloatFromNodeAtBase(uint baseAddr, string nodeKey, string altPath = null)
+        {
+            if (baseAddr == 0u || string.IsNullOrWhiteSpace(nodeKey))
+                return 0f;
+
+            var node = GetNode(nodeKey) ?? (!string.IsNullOrWhiteSpace(altPath) ? GetNodeByPath(altPath) : null);
+            var local = node?.GetLocalOffsetsUInt();
+            if (local == null || local.Length == 0)
+                return 0f;
+
+            return ReadFloat(unchecked(baseAddr + local[0]));
+        }
+        
+        public static bool IsValidPointer(uint ptr)
+        {
+            return ptr >= MinValidPointer && ptr <= MaxValidPointer;
+        }
+
+        public uint GetNodeOffset(string key)
+        {
+            var node = GetNode(key);
+            if (node == null) return 0u;
+
+            var local = node.GetLocalOffsetsUInt();
+            if (local != null && local.Length > 0)
+                return local[0];
+
+            return node.HasOwnAddressDisplacement ? node.OwnAddressDisplacement : 0u;
+        }
+
+        public uint ResolveStructBase(string nodeKey)
+        {
+            var node = GetNode(nodeKey);
+            if (node == null) return 0u;
+
+            var offs = node.GetOffsetsUInt();
+            if (offs == null || offs.Length == 0) return 0u;
+
+            return ResolvePointer(GetNodeBaseAddress(node), offs);
+        }
+
+        public uint FollowPointerChain(uint startPtr, uint[] offsets)
+        {
+            if (!IsValidPointer(startPtr) || offsets == null || offsets.Length == 0)
+                return 0u;
+
+            uint current = ReadUInt(unchecked(startPtr + offsets[0]));
+            if (!IsValidPointer(current))
+                return 0u;
+
+            for (int i = 1; i < offsets.Length; i++)
+            {
+                uint off = offsets[i];
+                if (i == offsets.Length - 1 && off == 0u)
+                    return current;
+
+                current = ReadUInt(unchecked(current + off));
+                if (!IsValidPointer(current))
+                    return 0u;
+            }
+
+            return current;
+        }
+
+        public string ReadUnicodeStringByChain(uint startPtr, string nodeKey, int maxChars = 64)
+        {
+            var offs = GetNode(nodeKey)?.GetLocalOffsetsUInt();
+            if (offs == null || offs.Length == 0)
+                return string.Empty;
+
+            uint strAddr = FollowPointerChain(startPtr, offs);
+            if (!IsValidPointer(strAddr))
+                return string.Empty;
+
+            return ReadUnicodeString(strAddr, maxChars);
+        }
         public byte ReadByte(uint addr)
         {
             if (addr == 0u) return 0;
@@ -198,6 +312,23 @@ namespace Full_Bot
             return nullIdx >= 0 ? str.Substring(0, nullIdx) : str;
         }
 
+        public string ReadUnicodeStringByNode(string nodeKey, int maxChars = 64, params uint[] arrayIndices)
+        {
+            if (string.IsNullOrWhiteSpace(nodeKey))
+                return string.Empty;
+
+            var node = GetNode(nodeKey);
+            if (node == null)
+                return string.Empty;
+
+            uint basePtr = ResolveNodeAddress(node, dereferenceLastPointer: false, arrayIndices: arrayIndices);
+            if (basePtr == 0u)
+                return string.Empty;
+
+            string n = ReadUnicodeString(basePtr, maxChars);
+            return string.IsNullOrWhiteSpace(n) ? string.Empty : n.Trim();
+        }
+
         public string ReadNodeString(CtEntryNode node, int maxChars = 64, bool derefFinalPointer = false, params uint[] arrayIndices)
         {
             if (node == null) return string.Empty;
@@ -225,13 +356,6 @@ namespace Full_Bot
             return addr;
         }
 
-        /// <summary>
-        /// Resolve o endereço final de um nó na árvore do .CT, respeitando:
-        /// - deslocamento próprio de <Address> (+0, +D, +11, etc.)
-        /// - cadeia de <Offsets>
-        /// - fórmulas em qualquer nível da linhagem
-        /// - opção de não desreferenciar o último passo quando o alvo já é o endereço do dado/estrutura
-        /// </summary>
         public uint ResolveNodeAddress(CtEntryNode node, bool dereferenceLastPointer = true, params uint[] arrayIndices)
         {
             if (node == null || string.IsNullOrWhiteSpace(node.BaseAddress))

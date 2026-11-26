@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -48,8 +47,6 @@ namespace Full_Bot
         private const uint MaxDropsSafety = 1000;
         private const uint MaxFriendsSafety = 300;
         private const int MaxPartyBuffSlotsSafety = 64;
-        private const uint MinValidUserPtr = 0x00010000u;
-        private const uint MaxValidUserPtr = 0x7FFFFFFFu;
 
         private readonly MemoryProcess _mem;
         private readonly PlayerCore _selfPlayer;
@@ -60,86 +57,12 @@ namespace Full_Bot
             _selfPlayer = selfPlayer;
         }
 
-        private uint WorldBase
+        private string ReadEntityName(uint entityPtr, string nameNodeKey, int maxChars, uint templateId = 0, uint entityType = 0, bool useFallback = false)
         {
-            get
-            {
-                var worldNode = _mem.GetNode("world_base");
-                if (worldNode != null)
-                {
-                    var offs = worldNode.GetOffsetsUInt();
-                    if (offs.Length > 0)
-                        return _mem.ResolvePointer(_mem.GetNodeBaseAddress(worldNode), offs);
-                }
-
-                var baseNode = _mem.GetNode("base_address") ?? _mem.GetNode("base_ptr_raw");
-                uint gameRunOff = _mem.GetFirstLocalOffset("struct_base", 0x1C);
-                uint worldOff = _mem.GetFirstLocalOffset("world_base", 0x18);
-                return _mem.ResolvePointer(_mem.GetNodeBaseAddress(baseNode), gameRunOff, worldOff);
-            }
-        }
-
-        private uint PlayerStructBase
-        {
-            get
-            {
-                var pNode = _mem.GetNode("player_struct");
-                if (pNode != null)
-                {
-                    var offs = pNode.GetOffsetsUInt();
-                    if (offs.Length > 0)
-                        return _mem.ResolvePointer(_mem.GetNodeBaseAddress(pNode), offs);
-                }
-
-                var baseNode = _mem.GetNode("base_address") ?? _mem.GetNode("base_ptr_raw");
-                uint gameRunOff = _mem.GetFirstLocalOffset("struct_base", 0x1C);
-                uint playerOff = _mem.GetFirstLocalOffset("player_struct", 0x2C);
-                return _mem.ResolvePointer(_mem.GetNodeBaseAddress(baseNode), gameRunOff, playerOff);
-            }
-        }
-
-        private static bool IsLikelyValidPointer(uint ptr)
-        {
-            return ptr >= MinValidUserPtr && ptr <= MaxValidUserPtr;
-        }
-
-        private string ReadEntityName(uint entityPtr, uint[] nameOffs, int maxChars, uint templateId = 0, uint entityType = 0, bool useFallback = false)
-        {
-            if (!IsLikelyValidPointer(entityPtr) || nameOffs == null || nameOffs.Length == 0)
+            if (!MemoryProcess.IsValidPointer(entityPtr))
                 return useFallback ? FormatEntityFallbackName(templateId, entityType) : string.Empty;
 
-            uint current = _mem.ReadUInt(entityPtr + nameOffs[0]);
-
-            if (nameOffs.Length == 1)
-            {
-                if (!IsLikelyValidPointer(current))
-                    return useFallback ? FormatEntityFallbackName(templateId, entityType) : string.Empty;
-
-                return CleanEntityString(_mem.ReadUnicodeString(current, maxChars), templateId, entityType, useFallback);
-            }
-
-            for (int n = 1; n < nameOffs.Length - 1; n++)
-            {
-                if (!IsLikelyValidPointer(current))
-                    return useFallback ? FormatEntityFallbackName(templateId, entityType) : string.Empty;
-
-                current = _mem.ReadUInt(current + nameOffs[n]);
-            }
-
-            if (!IsLikelyValidPointer(current))
-                return useFallback ? FormatEntityFallbackName(templateId, entityType) : string.Empty;
-
-            uint lastOffset = nameOffs[nameOffs.Length - 1];
-            uint strAddr = (lastOffset == 0) ? current : _mem.ReadUInt(current + lastOffset);
-
-            if (!IsLikelyValidPointer(strAddr))
-                return useFallback ? FormatEntityFallbackName(templateId, entityType) : string.Empty;
-
-            return CleanEntityString(_mem.ReadUnicodeString(strAddr, maxChars), templateId, entityType, useFallback);
-        }
-
-        private static string CleanEntityString(string raw, uint templateId, uint entityType, bool useFallback)
-        {
+            string raw = _mem.ReadUnicodeStringByChain(entityPtr, nameNodeKey, maxChars);
             if (string.IsNullOrWhiteSpace(raw))
                 return useFallback ? FormatEntityFallbackName(templateId, entityType) : string.Empty;
 
@@ -159,40 +82,34 @@ namespace Full_Bot
         public List<WorldEntityInfo> GetMobsAndNpcs()
         {
             var list = new List<WorldEntityInfo>();
-            uint wBase = WorldBase;
-            if (!IsLikelyValidPointer(wBase)) return list;
+            uint wBase = _mem.ResolveStructBase("world_base");
+            if (!MemoryProcess.IsValidPointer(wBase)) return list;
 
-            uint mobBaseOff = _mem.GetFirstLocalOffset("world_mobs_npc_base", 0x24);
-            uint mobBase = _mem.ReadUInt(wBase + mobBaseOff);
-            if (!IsLikelyValidPointer(mobBase)) return list;
+            uint mobBase = _mem.ReadUIntFromNodeAtBase(wBase, "world_mobs_npc_base");
+            if (!MemoryProcess.IsValidPointer(mobBase)) return list;
 
-            uint countOff = _mem.GetFirstLocalOffset("world_mob_count", 0x18);
-            uint arrayOff = _mem.GetFirstLocalOffset("world_mob_array", 0x5C);
-
-            uint count = _mem.ReadUInt(mobBase + countOff);
-            uint arrayPtr = _mem.ReadUInt(mobBase + arrayOff);
-            if (!IsLikelyValidPointer(arrayPtr) || count == 0 || count > MaxMobsSafety) return list;
+            uint count = _mem.ReadUIntFromNodeAtBase(mobBase, "world_mob_count");
+            uint arrayPtr = _mem.ReadUIntFromNodeAtBase(mobBase, "world_mob_array");
+            if (!MemoryProcess.IsValidPointer(arrayPtr) || count == 0u || count > MaxMobsSafety) return list;
 
             var slotNode = _mem.GetNode("world_mob_ptr-index-mul-4");
-            var nameNode = _mem.GetNode("mob_name");
-            var nameOffs = nameNode?.GetLocalOffsetsUInt() ?? new uint[] { 0x254, 0x00 };
+            if (slotNode == null) return list;
 
-            uint serverIdOff = _mem.GetFirstLocalOffset("mob_server_id", 0x114);
-            uint templateIdOff = _mem.GetFirstLocalOffset("mob_id", 0x118);
-            uint lvlOff = _mem.GetFirstLocalOffset("mob_level", 0x120);
-            uint hpOff = _mem.GetFirstLocalOffset("mob_hp", 0x128);
-            uint hpMaxOff = _mem.GetFirstLocalOffset("mob_hp_max", 0x174);
-            uint typeOff = _mem.GetFirstLocalOffset("mob_type", 0xB4);
-            uint distOff = _mem.GetFirstLocalOffset("mob_distance", 0x27C);
-            uint xOff = _mem.GetFirstLocalOffset("mob_pos_x", 0x3C);
-            uint yOff = _mem.GetFirstLocalOffset("mob_pos_y", 0x40);
-            uint zOff = _mem.GetFirstLocalOffset("mob_pos_z", 0x44);
+            uint serverIdOff = _mem.GetNodeOffset("mob_server_id");
+            uint templateIdOff = _mem.GetNodeOffset("mob_id");
+            uint lvlOff = _mem.GetNodeOffset("mob_level");
+            uint hpOff = _mem.GetNodeOffset("mob_hp");
+            uint hpMaxOff = _mem.GetNodeOffset("mob_hp_max");
+            uint typeOff = _mem.GetNodeOffset("mob_type");
+            uint distOff = _mem.GetNodeOffset("mob_distance");
+            uint xOff = _mem.GetNodeOffset("mob_pos_x");
+            uint yOff = _mem.GetNodeOffset("mob_pos_y");
+            uint zOff = _mem.GetNodeOffset("mob_pos_z");
 
-            for (uint i = 0; i < count; i++)
+            for (uint i = 0u; i < count; i++)
             {
-                uint delta = slotNode != null ? slotNode.EvaluateFormula(i) : (i * 4u);
-                uint mPtr = _mem.ReadUInt(arrayPtr + delta);
-                if (!IsLikelyValidPointer(mPtr)) continue;
+                uint mPtr = _mem.ReadUInt(arrayPtr + slotNode.EvaluateFormula(i));
+                if (!MemoryProcess.IsValidPointer(mPtr)) continue;
 
                 uint templateId = _mem.ReadUInt(mPtr + templateIdOff);
                 uint entityType = _mem.ReadUInt(mPtr + typeOff);
@@ -201,7 +118,7 @@ namespace Full_Bot
                 {
                     ServerId = _mem.ReadUInt(mPtr + serverIdOff),
                     TemplateId = templateId,
-                    Name = ReadEntityName(mPtr, nameOffs, 32, templateId, entityType, useFallback: true),
+                    Name = ReadEntityName(mPtr, "mob_name", 32, templateId, entityType, useFallback: true),
                     Level = _mem.ReadUInt(mPtr + lvlOff),
                     HP = _mem.ReadUInt(mPtr + hpOff),
                     HPMax = _mem.ReadUInt(mPtr + hpMaxOff),
@@ -212,43 +129,38 @@ namespace Full_Bot
                     Z = _mem.ReadFloat(mPtr + zOff)
                 });
             }
+
             return list;
         }
 
         public List<WorldEntityInfo> GetNearbyPlayers()
         {
             var list = new List<WorldEntityInfo>();
-            uint wBase = WorldBase;
-            if (!IsLikelyValidPointer(wBase)) return list;
+            uint wBase = _mem.ResolveStructBase("world_base");
+            if (!MemoryProcess.IsValidPointer(wBase)) return list;
 
-            uint pplBaseOff = _mem.GetFirstLocalOffset("world_ppl_base", 0x20);
-            uint pplBase = _mem.ReadUInt(wBase + pplBaseOff);
-            if (!IsLikelyValidPointer(pplBase)) return list;
+            uint pplBase = _mem.ReadUIntFromNodeAtBase(wBase, "world_ppl_base");
+            if (!MemoryProcess.IsValidPointer(pplBase)) return list;
 
-            uint countOff = _mem.GetFirstLocalOffset("world_ppl_count", 0x18);
-            uint arrayOff = _mem.GetFirstLocalOffset("world_ppl_array", 0x98);
-
-            uint count = _mem.ReadUInt(pplBase + countOff);
-            uint arrayPtr = _mem.ReadUInt(pplBase + arrayOff);
-            if (!IsLikelyValidPointer(arrayPtr) || count == 0 || count > MaxPlayersSafety) return list;
+            uint count = _mem.ReadUIntFromNodeAtBase(pplBase, "world_ppl_count");
+            uint arrayPtr = _mem.ReadUIntFromNodeAtBase(pplBase, "world_ppl_array");
+            if (!MemoryProcess.IsValidPointer(arrayPtr) || count == 0u || count > MaxPlayersSafety) return list;
 
             var slotNode = _mem.GetNode("world_ppl_ptr-index-mul-4");
-            var nameNode = _mem.GetNode("ppl_name");
-            var nameOffs = nameNode?.GetLocalOffsetsUInt() ?? new uint[] { 0x6E0, 0x00 };
+            if (slotNode == null) return list;
 
-            uint idOff = _mem.GetFirstLocalOffset("ppl_id", 0x4B8);
-            uint lvlOff = _mem.GetFirstLocalOffset("ppl_level", 0x4C4);
-            uint hpOff = _mem.GetFirstLocalOffset("ppl_hp", 0x4CC);
-            uint hpMaxOff = _mem.GetFirstLocalOffset("ppl_hp_max", 0x518);
-            uint xOff = _mem.GetFirstLocalOffset("ppl_pos_x", 0x3C);
-            uint yOff = _mem.GetFirstLocalOffset("ppl_pos_y", 0x40);
-            uint zOff = _mem.GetFirstLocalOffset("ppl_pos_z", 0x44);
+            uint idOff = _mem.GetNodeOffset("ppl_id");
+            uint lvlOff = _mem.GetNodeOffset("ppl_level");
+            uint hpOff = _mem.GetNodeOffset("ppl_hp");
+            uint hpMaxOff = _mem.GetNodeOffset("ppl_hp_max");
+            uint xOff = _mem.GetNodeOffset("ppl_pos_x");
+            uint yOff = _mem.GetNodeOffset("ppl_pos_y");
+            uint zOff = _mem.GetNodeOffset("ppl_pos_z");
 
-            for (uint i = 0; i < count; i++)
+            for (uint i = 0u; i < count; i++)
             {
-                uint delta = slotNode != null ? slotNode.EvaluateFormula(i) : (i * 4u);
-                uint pPtr = _mem.ReadUInt(arrayPtr + delta);
-                if (!IsLikelyValidPointer(pPtr)) continue;
+                uint pPtr = _mem.ReadUInt(arrayPtr + slotNode.EvaluateFormula(i));
+                if (!MemoryProcess.IsValidPointer(pPtr)) continue;
 
                 uint pid = _mem.ReadUInt(pPtr + idOff);
                 float px = _mem.ReadFloat(pPtr + xOff);
@@ -259,15 +171,19 @@ namespace Full_Bot
 
                 float dist = 0f;
                 if (_selfPlayer != null && _selfPlayer.Id != 0 && pid != _selfPlayer.Id)
-                    dist = MoveObstacleAvoidance.Dist2D(_selfPlayer.X, _selfPlayer.Z, px, pz);
+                {
+                    float dx = px - _selfPlayer.X;
+                    float dz = pz - _selfPlayer.Z;
+                    dist = (float)System.Math.Sqrt((dx * dx) + (dz * dz));
+                }
 
                 list.Add(new WorldEntityInfo
                 {
                     ServerId = pid,
-                    Name = ReadEntityName(pPtr, nameOffs, 32, useFallback: false),
+                    Name = ReadEntityName(pPtr, "ppl_name", 32, useFallback: false),
                     Level = _mem.ReadUInt(pPtr + lvlOff),
                     HP = hp,
-                    HPMax = hpMax > 0 ? hpMax : hp,
+                    HPMax = hpMax > 0u ? hpMax : hp,
                     Type = 1,
                     Distance = dist,
                     X = px,
@@ -275,32 +191,30 @@ namespace Full_Bot
                     Z = pz
                 });
             }
+
             return list;
         }
 
-        /// <summary>
-        /// Lê os IDs de ícone de buff ativos de um membro da party a partir de party_member_buff_array (0x58)
-        /// e party_member_buff_icon_id-index-mul-12 (passo de 12 bytes, vtWord).
-        /// </summary>
         public List<uint> GetPartyMemberBuffIconIds(uint memberPtr)
         {
             var buffs = new List<uint>();
-            if (!IsLikelyValidPointer(memberPtr))
+            if (!MemoryProcess.IsValidPointer(memberPtr))
                 return buffs;
 
-            uint buffArrayOff = _mem.GetFirstLocalOffset("party_member_buff_array", 0x58);
-            uint buffArrayPtr = _mem.ReadUInt(memberPtr + buffArrayOff);
-            if (!IsLikelyValidPointer(buffArrayPtr))
+            uint buffArrayPtr = _mem.ReadUIntFromNodeAtBase(memberPtr, "party_member_buff_array");
+            if (!MemoryProcess.IsValidPointer(buffArrayPtr))
                 return buffs;
 
             var iconNode = _mem.GetNode("party_member_buff_icon_id-index-mul-12");
-            uint iconLocalOff = iconNode != null ? _mem.GetFirstLocalOffset("party_member_buff_icon_id-index-mul-12", 0x0) : 0x0;
+            if (iconNode == null)
+                return buffs;
+
+            uint iconLocalOff = _mem.GetNodeOffset("party_member_buff_icon_id-index-mul-12");
 
             for (int i = 0; i < MaxPartyBuffSlotsSafety; i++)
             {
-                uint delta = iconNode != null ? iconNode.EvaluateFormula((uint)i) : ((uint)i * 12u);
+                uint delta = iconNode.EvaluateFormula((uint)i);
                 ushort iconId = _mem.ReadUShort(buffArrayPtr + delta + iconLocalOff);
-
                 if (iconId == 0)
                     continue;
 
@@ -313,60 +227,43 @@ namespace Full_Bot
         public List<FriendEntityInfo> GetFriends()
         {
             var list = new List<FriendEntityInfo>();
-            uint pStruct = PlayerStructBase;
-            if (!IsLikelyValidPointer(pStruct)) return list;
+            uint pStruct = _mem.ResolveStructBase("player_struct");
+            if (!MemoryProcess.IsValidPointer(pStruct)) return list;
 
-            uint friendsBaseOff = _mem.GetFirstLocalOffset("friends_base", 0x14E4);
-            uint friendsBase = _mem.ReadUInt(pStruct + friendsBaseOff);
-            if (!IsLikelyValidPointer(friendsBase)) return list;
+            uint friendsBase = _mem.ReadUIntFromNodeAtBase(pStruct, "friends_base");
+            if (!MemoryProcess.IsValidPointer(friendsBase)) return list;
 
-            var countNode = _mem.GetNode("friend_count");
-            uint count = 0;
-            if (countNode != null)
-            {
-                var cOffs = countNode.GetLocalOffsetsUInt();
-                if (cOffs.Length > 0)
-                    count = _mem.ReadUInt(_mem.ResolvePointer(friendsBase, cOffs));
-            }
-            if (count == 0)
-                count = _mem.ReadUInt(friendsBase + 0x20);
+            var cOffs = _mem.GetNode("friend_count")?.GetLocalOffsetsUInt();
+            if (cOffs == null || cOffs.Length == 0) return list;
 
-            if (count == 0 || count > MaxFriendsSafety) return list;
+            uint count = _mem.ReadUInt(_mem.ResolvePointer(friendsBase, cOffs));
+            if (count == 0u || count > MaxFriendsSafety) return list;
 
-            var arrNode = _mem.GetNode("friend_array");
-            uint arrayPtr = 0;
-            if (arrNode != null)
-            {
-                var aOffs = arrNode.GetLocalOffsetsUInt();
-                if (aOffs.Length > 0)
-                    arrayPtr = _mem.ResolvePointer(friendsBase, aOffs);
-            }
-            if (!IsLikelyValidPointer(arrayPtr))
-                arrayPtr = _mem.ResolvePointer(friendsBase, 0xC, 0x0, 0x14);
+            var aOffs = _mem.GetNode("friend_array")?.GetLocalOffsetsUInt();
+            if (aOffs == null || aOffs.Length == 0) return list;
 
-            if (!IsLikelyValidPointer(arrayPtr)) return list;
+            uint arrayPtr = _mem.ResolvePointer(friendsBase, aOffs);
+            if (!MemoryProcess.IsValidPointer(arrayPtr)) return list;
 
             var slotNode = _mem.GetNode("friend_slot_ptr-index-mul-4");
-            var nameNode = _mem.GetNode("friend_name");
-            var nameOffs = nameNode?.GetLocalOffsetsUInt() ?? new uint[] { 0x18, 0x00 };
+            if (slotNode == null) return list;
 
-            uint idOff = _mem.GetFirstLocalOffset("friend_id", 0x00);
-            uint classOff = _mem.GetFirstLocalOffset("friend_class", 0x04);
-            uint lvlOff = _mem.GetFirstLocalOffset("friend_level", 0x10);
+            uint idOff = _mem.GetNodeOffset("friend_id");
+            uint classOff = _mem.GetNodeOffset("friend_class");
+            uint lvlOff = _mem.GetNodeOffset("friend_level");
 
-            for (uint i = 0; i < count; i++)
+            for (uint i = 0u; i < count; i++)
             {
-                uint delta = slotNode != null ? slotNode.EvaluateFormula(i) : (i * 4u);
-                uint fPtr = _mem.ReadUInt(arrayPtr + delta);
-                if (!IsLikelyValidPointer(fPtr)) continue;
+                uint fPtr = _mem.ReadUInt(arrayPtr + slotNode.EvaluateFormula(i));
+                if (!MemoryProcess.IsValidPointer(fPtr)) continue;
 
                 uint fid = _mem.ReadUInt(fPtr + idOff);
-                if (fid == 0) continue;
+                if (fid == 0u) continue;
 
                 list.Add(new FriendEntityInfo
                 {
                     Id = fid,
-                    Name = ReadEntityName(fPtr, nameOffs, 32, useFallback: false),
+                    Name = ReadEntityName(fPtr, "friend_name", 32, useFallback: false),
                     ClassId = _mem.ReadUInt(fPtr + classOff),
                     Level = _mem.ReadUInt(fPtr + lvlOff)
                 });
@@ -377,7 +274,7 @@ namespace Full_Bot
 
         public string ResolvePartyLeaderName(uint leaderId)
         {
-            if (leaderId == 0)
+            if (leaderId == 0u)
                 return "ID:0";
 
             if (_selfPlayer != null && _selfPlayer.Id == leaderId && !string.IsNullOrWhiteSpace(_selfPlayer.Name))
@@ -397,50 +294,43 @@ namespace Full_Bot
         public List<DropItemInfo> GetGroundDrops()
         {
             var list = new List<DropItemInfo>();
-            uint wBase = WorldBase;
-            if (!IsLikelyValidPointer(wBase)) return list;
+            uint wBase = _mem.ResolveStructBase("world_base");
+            if (!MemoryProcess.IsValidPointer(wBase)) return list;
 
-            uint dropBaseOff = _mem.GetFirstLocalOffset("world_drop_base", 0x28);
-            uint dropBase = _mem.ReadUInt(wBase + dropBaseOff);
-            if (!IsLikelyValidPointer(dropBase)) return list;
+            uint dropBase = _mem.ReadUIntFromNodeAtBase(wBase, "world_drop_base");
+            if (!MemoryProcess.IsValidPointer(dropBase)) return list;
 
-            uint countOff = _mem.GetFirstLocalOffset("world_drop_count", 0x14);
-            uint arraySizeOff = _mem.GetFirstLocalOffset("world_drop_array_sizeof", 0x18);
-            uint arrayOff = _mem.GetFirstLocalOffset("world_drop_array", 0x1C);
-
-            uint count = _mem.ReadUInt(dropBase + countOff);
-            uint arraySize = _mem.ReadUInt(dropBase + arraySizeOff);
-            uint arrayPtr = _mem.ReadUInt(dropBase + arrayOff);
-            if (!IsLikelyValidPointer(arrayPtr) || count == 0 || arraySize == 0 || arraySize > MaxDropsSafety) return list;
+            uint count = _mem.ReadUIntFromNodeAtBase(dropBase, "world_drop_count");
+            uint arraySize = _mem.ReadUIntFromNodeAtBase(dropBase, "world_drop_array_sizeof");
+            uint arrayPtr = _mem.ReadUIntFromNodeAtBase(dropBase, "world_drop_array");
+            if (!MemoryProcess.IsValidPointer(arrayPtr) || count == 0u || arraySize == 0u || arraySize > MaxDropsSafety) return list;
 
             var slotNode = _mem.GetNode("world_drop_slot_ptr-index-mul-4");
-            uint itemPtrOff = _mem.GetFirstLocalOffset("world_drop_item_ptr", 0x04);
+            if (slotNode == null) return list;
 
-            var nameNode = _mem.GetNode("drop_name");
-            var nameOffs = nameNode?.GetLocalOffsetsUInt() ?? new uint[] { 0x16C, 0x00 };
+            uint itemPtrOff = _mem.GetNodeOffset("world_drop_item_ptr");
 
-            uint serverIdOff = _mem.GetFirstLocalOffset("drop_server_id", 0x110);
-            uint itemIdOff = _mem.GetFirstLocalOffset("drop_id", 0x114);
-            uint typeOff = _mem.GetFirstLocalOffset("drop_type", 0x150);
-            uint distOff = _mem.GetFirstLocalOffset("drop_distance", 0x160);
-            uint xOff = _mem.GetFirstLocalOffset("drop_pos_x", 0x3C);
-            uint yOff = _mem.GetFirstLocalOffset("drop_pos_y", 0x40);
-            uint zOff = _mem.GetFirstLocalOffset("drop_pos_z", 0x44);
+            uint serverIdOff = _mem.GetNodeOffset("drop_server_id");
+            uint itemIdOff = _mem.GetNodeOffset("drop_id");
+            uint typeOff = _mem.GetNodeOffset("drop_type");
+            uint distOff = _mem.GetNodeOffset("drop_distance");
+            uint xOff = _mem.GetNodeOffset("drop_pos_x");
+            uint yOff = _mem.GetNodeOffset("drop_pos_y");
+            uint zOff = _mem.GetNodeOffset("drop_pos_z");
 
-            for (uint i = 0; i < arraySize; i++)
+            for (uint i = 0u; i < arraySize; i++)
             {
-                uint delta = slotNode != null ? slotNode.EvaluateFormula(i) : (i * 4u);
-                uint nodePtr = _mem.ReadUInt(arrayPtr + delta);
-                if (!IsLikelyValidPointer(nodePtr)) continue;
+                uint nodePtr = _mem.ReadUInt(arrayPtr + slotNode.EvaluateFormula(i));
+                if (!MemoryProcess.IsValidPointer(nodePtr)) continue;
 
                 uint itemPtr = _mem.ReadUInt(nodePtr + itemPtrOff);
-                if (!IsLikelyValidPointer(itemPtr)) continue;
+                if (!MemoryProcess.IsValidPointer(itemPtr)) continue;
 
                 list.Add(new DropItemInfo
                 {
                     ServerId = _mem.ReadUInt(itemPtr + serverIdOff),
                     ItemId = _mem.ReadUInt(itemPtr + itemIdOff),
-                    Name = ReadEntityName(itemPtr, nameOffs, 48, useFallback: false),
+                    Name = ReadEntityName(itemPtr, "drop_name", 48, useFallback: false),
                     Type = _mem.ReadUInt(itemPtr + typeOff),
                     Distance = _mem.ReadFloat(itemPtr + distOff),
                     X = _mem.ReadFloat(itemPtr + xOff),
@@ -448,6 +338,7 @@ namespace Full_Bot
                     Z = _mem.ReadFloat(itemPtr + zOff)
                 });
             }
+
             return list;
         }
     }

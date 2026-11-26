@@ -1,53 +1,12 @@
-using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
 namespace Full_Bot
 {
-    public enum LootFilterMode
+    public class PlayerDefinition
     {
-        Nenhum = 0,
-        SomenteMoedas = 1,
-        ListaEspecifica = 2,
-        TodosNoRaio = 3
-    }
-
-    public class CharacterProfile
-    {
-        public bool AutoAcceptParty { get; set; } = true;
-        public List<uint> AllowedPartyLeaderIds { get; set; } = new List<uint>();
-
-        public bool AutoInviteFriends { get; set; } = false;
-        public List<uint> AutoInviteFriendIds { get; set; } = new List<uint>();
-
-        public bool HelpAlliesInQuest { get; set; } = true;
         public string Role { get; set; } = "Solo"; // "Solo", "Lider", "Seguidor"
         public uint LeaderPlayerId { get; set; } = 0;
-        public float MaxLeaderDistance { get; set; } = 100f;
-
-        public LootFilterMode LootMode { get; set; } = LootFilterMode.SomenteMoedas;
-        public float LootRadius { get; set; } = 6.0f;
-        public List<uint> CollectItemIds { get; set; } = new List<uint>();
-
-        public List<AutoBuffRule> BuffRules { get; set; } = new List<AutoBuffRule>();
-        public List<uint> AttackSkills { get; set; } = new List<uint>();
-        public List<uint> FarmMobIds { get; set; } = new List<uint>();
-
-        // Metas de combate, área e voo
-        public bool AutoMobPull { get; set; } = false;
-        public float MobPullRadius { get; set; } = 22f;
-        public bool AutoDefend { get; set; } = true;
-        public float AggroDetectRadius { get; set; } = 16f;
-
-        public bool HasAreaCenter { get; set; } = false;
-        public float AreaCenterX { get; set; } = 0f;
-        public float AreaCenterY { get; set; } = 0f;
-        public float AreaCenterZ { get; set; } = 0f;
-        public float AreaRadius { get; set; } = 45f;
-
-        public bool UseFlightForLongDistance { get; set; } = false;
-        public float FlyMinDistance { get; set; } = 60f;
-        public int FlyAltitude { get; set; } = 25;
     }
 
     public static class ProfileManager
@@ -68,25 +27,7 @@ namespace Full_Bot
 
             if (!File.Exists(DefaultFile))
             {
-                var def = new CharacterProfile
-                {
-                    AutoAcceptParty = true,
-                    AllowedPartyLeaderIds = new List<uint>(),
-                    AutoInviteFriends = false,
-                    AutoInviteFriendIds = new List<uint>(),
-                    HelpAlliesInQuest = true,
-                    Role = "Solo",
-                    MaxLeaderDistance = 100f,
-                    LootMode = LootFilterMode.SomenteMoedas,
-                    LootRadius = 6.0f,
-                    CollectItemIds = new List<uint>(),
-                    BuffRules = new List<AutoBuffRule>
-                    {
-                        new AutoBuffRule { IconId = 65, SkillId = 77, BuffPartyAllies = true }
-                    },
-                    AttackSkills = new List<uint>(),
-                    FarmMobIds = new List<uint>()
-                };
+                var def = new PlayerDefinition();
                 File.WriteAllText(DefaultFile, JsonSerializer.Serialize(def, JsonOpts));
             }
         }
@@ -107,17 +48,17 @@ namespace Full_Bot
             return charPath;
         }
 
-        public static CharacterProfile LoadForChar(string charName)
+        public static PlayerDefinition LoadForChar(string charName)
         {
             string path = GetProfilePath(charName);
             string json = File.ReadAllText(path);
-            return JsonSerializer.Deserialize<CharacterProfile>(json, JsonOpts) ?? new CharacterProfile();
+            return JsonSerializer.Deserialize<PlayerDefinition>(json, JsonOpts) ?? new PlayerDefinition();
         }
 
-        public static void SaveForChar(string charName, CharacterProfile profile)
+        public static void SaveForChar(string charName, PlayerDefinition definition)
         {
             string path = GetProfilePath(charName);
-            File.WriteAllText(path, JsonSerializer.Serialize(profile, JsonOpts));
+            File.WriteAllText(path, JsonSerializer.Serialize(definition ?? new PlayerDefinition(), JsonOpts));
         }
     }
 }
