@@ -1,8 +1,48 @@
+using Full_Bot;
 using System.Collections.Generic;
 using System.Linq;
 
 namespace Full_Bot
 {
+    public enum MobStatusType : uint
+    {
+        Unknown = 0,
+        Idle = 1,
+        PhysicalAttack = 2,
+        MagicAttack = 3,
+        Dead = 4,
+        Moving = 5
+    }
+
+    public class NpcServicesInfo
+    {
+        public uint NpcId { get; set; }
+        public uint TemplateId { get; set; }
+        public uint Sell { get; set; }
+        public uint Buy { get; set; }
+        public uint Repair { get; set; }
+        public uint Install { get; set; }
+        public uint Uninstall { get; set; }
+        public uint Storage { get; set; }
+        public uint Skill { get; set; }
+        public uint Make { get; set; }
+        public uint Teleport { get; set; }
+
+        public bool HasSell => Sell != 0u;
+        public bool HasBuy => Buy != 0u;
+        public bool HasRepair => Repair != 0u;
+        public bool HasInstall => Install != 0u;
+        public bool HasUninstall => Uninstall != 0u;
+        public bool HasStorage => Storage != 0u;
+        public bool HasSkill => Skill != 0u;
+        public bool HasMake => Make != 0u;
+        public bool HasTeleport => Teleport != 0u;
+
+        public bool HasAnyService =>
+            HasSell || HasBuy || HasRepair || HasInstall || HasUninstall ||
+            HasStorage || HasSkill || HasMake || HasTeleport;
+    }
+
     public class WorldEntityInfo
     {
         public uint ServerId { get; set; }
@@ -14,10 +54,17 @@ namespace Full_Bot
         public uint MP { get; set; }
         public uint MPMax { get; set; }
         public uint Type { get; set; }
+        public uint MoveMode { get; set; }
+        public uint Status { get; set; }
         public float Distance { get; set; }
         public float X { get; set; }
         public float Y { get; set; }
         public float Z { get; set; }
+        public NpcServicesInfo NpcServices { get; set; }
+
+        public bool IsDead => Status == (uint)MobStatusType.Dead;
+        public bool IsMoving => Status == (uint)MobStatusType.Moving;
+        public bool IsNpc => Type == 7u;
     }
 
     public class DropItemInfo
@@ -59,7 +106,7 @@ namespace Full_Bot
 
         private string ReadEntityName(uint entityPtr, string nameNodeKey, int maxChars, uint templateId = 0, uint entityType = 0, bool useFallback = false)
         {
-            if (!MemoryProcess.IsValidPointer(entityPtr))
+            if (_mem == null || !MemoryProcess.IsValidPointer(entityPtr))
                 return useFallback ? FormatEntityFallbackName(templateId, entityType) : string.Empty;
 
             string raw = _mem.ReadUnicodeStringByChain(entityPtr, nameNodeKey, maxChars);
@@ -79,9 +126,48 @@ namespace Full_Bot
             return templateId > 0 ? $"{prefix} #{templateId}" : prefix;
         }
 
+        private NpcServicesInfo ReadNpcServices(uint mobPtr, uint essenceOff, uint entityType)
+        {
+            if (_mem == null || entityType != 7u || essenceOff == 0u || !MemoryProcess.IsValidPointer(mobPtr))
+                return null;
+
+            uint essencePtr = _mem.ReadUInt(unchecked(mobPtr + essenceOff));
+            if (!MemoryProcess.IsValidPointer(essencePtr))
+                return null;
+
+            uint npcIdOff = _mem.GetNodeOffset("mob_essence_npc_id");
+            uint tplIdOff = _mem.GetNodeOffset("mob_essence_template_id");
+            uint sellOff = _mem.GetNodeOffset("mob_essence_sell_service");
+            uint buyOff = _mem.GetNodeOffset("mob_essence_buy_service");
+            uint repairOff = _mem.GetNodeOffset("mob_essence_repair_service");
+            uint installOff = _mem.GetNodeOffset("mob_essence_install_service");
+            uint uninstallOff = _mem.GetNodeOffset("mob_essence_uninstall_service");
+            uint storageOff = _mem.GetNodeOffset("mob_essence_storage_service");
+            uint skillOff = _mem.GetNodeOffset("mob_essence_skill_service");
+            uint makeOff = _mem.GetNodeOffset("mob_essence_make_service");
+            uint teleportOff = _mem.GetNodeOffset("mob_essence_teleport_service");
+
+            return new NpcServicesInfo
+            {
+                NpcId = npcIdOff > 0u ? _mem.ReadUInt(unchecked(essencePtr + npcIdOff)) : 0u,
+                TemplateId = tplIdOff > 0u ? _mem.ReadUInt(unchecked(essencePtr + tplIdOff)) : 0u,
+                Sell = sellOff > 0u ? _mem.ReadUInt(unchecked(essencePtr + sellOff)) : 0u,
+                Buy = buyOff > 0u ? _mem.ReadUInt(unchecked(essencePtr + buyOff)) : 0u,
+                Repair = repairOff > 0u ? _mem.ReadUInt(unchecked(essencePtr + repairOff)) : 0u,
+                Install = installOff > 0u ? _mem.ReadUInt(unchecked(essencePtr + installOff)) : 0u,
+                Uninstall = uninstallOff > 0u ? _mem.ReadUInt(unchecked(essencePtr + uninstallOff)) : 0u,
+                Storage = storageOff > 0u ? _mem.ReadUInt(unchecked(essencePtr + storageOff)) : 0u,
+                Skill = skillOff > 0u ? _mem.ReadUInt(unchecked(essencePtr + skillOff)) : 0u,
+                Make = makeOff > 0u ? _mem.ReadUInt(unchecked(essencePtr + makeOff)) : 0u,
+                Teleport = teleportOff > 0u ? _mem.ReadUInt(unchecked(essencePtr + teleportOff)) : 0u
+            };
+        }
+
         public List<WorldEntityInfo> GetMobsAndNpcs()
         {
             var list = new List<WorldEntityInfo>();
+            if (_mem == null) return list;
+
             uint wBase = _mem.ResolveStructBase("world_base");
             if (!MemoryProcess.IsValidPointer(wBase)) return list;
 
@@ -101,6 +187,9 @@ namespace Full_Bot
             uint hpOff = _mem.GetNodeOffset("mob_hp");
             uint hpMaxOff = _mem.GetNodeOffset("mob_hp_max");
             uint typeOff = _mem.GetNodeOffset("mob_type");
+            uint moveModeOff = _mem.GetNodeOffset("mob_move_mode");
+            uint statusOff = _mem.GetNodeOffset("mob_status");
+            uint essenceOff = _mem.GetNodeOffset("mob_essence");
             uint distOff = _mem.GetNodeOffset("mob_distance");
             uint xOff = _mem.GetNodeOffset("mob_pos_x");
             uint yOff = _mem.GetNodeOffset("mob_pos_y");
@@ -108,25 +197,41 @@ namespace Full_Bot
 
             for (uint i = 0u; i < count; i++)
             {
-                uint mPtr = _mem.ReadUInt(arrayPtr + slotNode.EvaluateFormula(i));
+                uint mPtr = _mem.ReadUInt(unchecked(arrayPtr + slotNode.EvaluateFormula(i)));
                 if (!MemoryProcess.IsValidPointer(mPtr)) continue;
 
-                uint templateId = _mem.ReadUInt(mPtr + templateIdOff);
-                uint entityType = _mem.ReadUInt(mPtr + typeOff);
+                uint serverId = serverIdOff > 0u ? _mem.ReadUInt(unchecked(mPtr + serverIdOff)) : 0u;
+                uint templateId = templateIdOff > 0u ? _mem.ReadUInt(unchecked(mPtr + templateIdOff)) : 0u;
+                uint entityType = typeOff > 0u ? _mem.ReadUInt(unchecked(mPtr + typeOff)) : 0u;
+
+                float x = xOff > 0u ? _mem.ReadFloat(unchecked(mPtr + xOff)) : 0f;
+                float y = yOff > 0u ? _mem.ReadFloat(unchecked(mPtr + yOff)) : 0f;
+                float z = zOff > 0u ? _mem.ReadFloat(unchecked(mPtr + zOff)) : 0f;
+
+                float dist = distOff > 0u ? _mem.ReadFloat(unchecked(mPtr + distOff)) : 0f;
+                if (dist <= 0.01f && _selfPlayer != null)
+                {
+                    float dx = x - _selfPlayer.X;
+                    float dz = z - _selfPlayer.Z;
+                    dist = (float)System.Math.Sqrt((dx * dx) + (dz * dz));
+                }
 
                 list.Add(new WorldEntityInfo
                 {
-                    ServerId = _mem.ReadUInt(mPtr + serverIdOff),
+                    ServerId = serverId,
                     TemplateId = templateId,
                     Name = ReadEntityName(mPtr, "mob_name", 32, templateId, entityType, useFallback: true),
-                    Level = _mem.ReadUInt(mPtr + lvlOff),
-                    HP = _mem.ReadUInt(mPtr + hpOff),
-                    HPMax = _mem.ReadUInt(mPtr + hpMaxOff),
+                    Level = lvlOff > 0u ? _mem.ReadUInt(unchecked(mPtr + lvlOff)) : 0u,
+                    HP = hpOff > 0u ? _mem.ReadUInt(unchecked(mPtr + hpOff)) : 0u,
+                    HPMax = hpMaxOff > 0u ? _mem.ReadUInt(unchecked(mPtr + hpMaxOff)) : 0u,
                     Type = entityType,
-                    Distance = _mem.ReadFloat(mPtr + distOff),
-                    X = _mem.ReadFloat(mPtr + xOff),
-                    Y = _mem.ReadFloat(mPtr + yOff),
-                    Z = _mem.ReadFloat(mPtr + zOff)
+                    MoveMode = moveModeOff > 0u ? _mem.ReadUInt(unchecked(mPtr + moveModeOff)) : 0u,
+                    Status = statusOff > 0u ? _mem.ReadUInt(unchecked(mPtr + statusOff)) : 0u,
+                    Distance = dist,
+                    X = x,
+                    Y = y,
+                    Z = z,
+                    NpcServices = ReadNpcServices(mPtr, essenceOff, entityType)
                 });
             }
 
@@ -136,6 +241,8 @@ namespace Full_Bot
         public List<WorldEntityInfo> GetNearbyPlayers()
         {
             var list = new List<WorldEntityInfo>();
+            if (_mem == null) return list;
+
             uint wBase = _mem.ResolveStructBase("world_base");
             if (!MemoryProcess.IsValidPointer(wBase)) return list;
 
@@ -159,15 +266,15 @@ namespace Full_Bot
 
             for (uint i = 0u; i < count; i++)
             {
-                uint pPtr = _mem.ReadUInt(arrayPtr + slotNode.EvaluateFormula(i));
+                uint pPtr = _mem.ReadUInt(unchecked(arrayPtr + slotNode.EvaluateFormula(i)));
                 if (!MemoryProcess.IsValidPointer(pPtr)) continue;
 
-                uint pid = _mem.ReadUInt(pPtr + idOff);
-                float px = _mem.ReadFloat(pPtr + xOff);
-                float py = _mem.ReadFloat(pPtr + yOff);
-                float pz = _mem.ReadFloat(pPtr + zOff);
-                uint hp = _mem.ReadUInt(pPtr + hpOff);
-                uint hpMax = _mem.ReadUInt(pPtr + hpMaxOff);
+                uint pid = idOff > 0u ? _mem.ReadUInt(unchecked(pPtr + idOff)) : 0u;
+                float px = xOff > 0u ? _mem.ReadFloat(unchecked(pPtr + xOff)) : 0f;
+                float py = yOff > 0u ? _mem.ReadFloat(unchecked(pPtr + yOff)) : 0f;
+                float pz = zOff > 0u ? _mem.ReadFloat(unchecked(pPtr + zOff)) : 0f;
+                uint hp = hpOff > 0u ? _mem.ReadUInt(unchecked(pPtr + hpOff)) : 0u;
+                uint hpMax = hpMaxOff > 0u ? _mem.ReadUInt(unchecked(pPtr + hpMaxOff)) : 0u;
 
                 float dist = 0f;
                 if (_selfPlayer != null && _selfPlayer.Id != 0 && pid != _selfPlayer.Id)
@@ -181,7 +288,7 @@ namespace Full_Bot
                 {
                     ServerId = pid,
                     Name = ReadEntityName(pPtr, "ppl_name", 32, useFallback: false),
-                    Level = _mem.ReadUInt(pPtr + lvlOff),
+                    Level = lvlOff > 0u ? _mem.ReadUInt(unchecked(pPtr + lvlOff)) : 0u,
                     HP = hp,
                     HPMax = hpMax > 0u ? hpMax : hp,
                     Type = 1,
@@ -198,7 +305,7 @@ namespace Full_Bot
         public List<uint> GetPartyMemberBuffIconIds(uint memberPtr)
         {
             var buffs = new List<uint>();
-            if (!MemoryProcess.IsValidPointer(memberPtr))
+            if (_mem == null || !MemoryProcess.IsValidPointer(memberPtr))
                 return buffs;
 
             uint buffArrayPtr = _mem.ReadUIntFromNodeAtBase(memberPtr, "party_member_buff_array");
@@ -214,7 +321,7 @@ namespace Full_Bot
             for (int i = 0; i < MaxPartyBuffSlotsSafety; i++)
             {
                 uint delta = iconNode.EvaluateFormula((uint)i);
-                ushort iconId = _mem.ReadUShort(buffArrayPtr + delta + iconLocalOff);
+                ushort iconId = _mem.ReadUShort(unchecked(buffArrayPtr + delta + iconLocalOff));
                 if (iconId == 0)
                     continue;
 
@@ -227,6 +334,8 @@ namespace Full_Bot
         public List<FriendEntityInfo> GetFriends()
         {
             var list = new List<FriendEntityInfo>();
+            if (_mem == null) return list;
+
             uint pStruct = _mem.ResolveStructBase("player_struct");
             if (!MemoryProcess.IsValidPointer(pStruct)) return list;
 
@@ -254,18 +363,18 @@ namespace Full_Bot
 
             for (uint i = 0u; i < count; i++)
             {
-                uint fPtr = _mem.ReadUInt(arrayPtr + slotNode.EvaluateFormula(i));
+                uint fPtr = _mem.ReadUInt(unchecked(arrayPtr + slotNode.EvaluateFormula(i)));
                 if (!MemoryProcess.IsValidPointer(fPtr)) continue;
 
-                uint fid = _mem.ReadUInt(fPtr + idOff);
+                uint fid = idOff > 0u ? _mem.ReadUInt(unchecked(fPtr + idOff)) : 0u;
                 if (fid == 0u) continue;
 
                 list.Add(new FriendEntityInfo
                 {
                     Id = fid,
                     Name = ReadEntityName(fPtr, "friend_name", 32, useFallback: false),
-                    ClassId = _mem.ReadUInt(fPtr + classOff),
-                    Level = _mem.ReadUInt(fPtr + lvlOff)
+                    ClassId = classOff > 0u ? _mem.ReadUInt(unchecked(fPtr + classOff)) : 0u,
+                    Level = lvlOff > 0u ? _mem.ReadUInt(unchecked(fPtr + lvlOff)) : 0u
                 });
             }
 
@@ -294,6 +403,8 @@ namespace Full_Bot
         public List<DropItemInfo> GetGroundDrops()
         {
             var list = new List<DropItemInfo>();
+            if (_mem == null) return list;
+
             uint wBase = _mem.ResolveStructBase("world_base");
             if (!MemoryProcess.IsValidPointer(wBase)) return list;
 
@@ -320,22 +431,22 @@ namespace Full_Bot
 
             for (uint i = 0u; i < arraySize; i++)
             {
-                uint nodePtr = _mem.ReadUInt(arrayPtr + slotNode.EvaluateFormula(i));
+                uint nodePtr = _mem.ReadUInt(unchecked(arrayPtr + slotNode.EvaluateFormula(i)));
                 if (!MemoryProcess.IsValidPointer(nodePtr)) continue;
 
-                uint itemPtr = _mem.ReadUInt(nodePtr + itemPtrOff);
+                uint itemPtr = itemPtrOff > 0u ? _mem.ReadUInt(unchecked(nodePtr + itemPtrOff)) : 0u;
                 if (!MemoryProcess.IsValidPointer(itemPtr)) continue;
 
                 list.Add(new DropItemInfo
                 {
-                    ServerId = _mem.ReadUInt(itemPtr + serverIdOff),
-                    ItemId = _mem.ReadUInt(itemPtr + itemIdOff),
+                    ServerId = serverIdOff > 0u ? _mem.ReadUInt(unchecked(itemPtr + serverIdOff)) : 0u,
+                    ItemId = itemIdOff > 0u ? _mem.ReadUInt(unchecked(itemPtr + itemIdOff)) : 0u,
                     Name = ReadEntityName(itemPtr, "drop_name", 48, useFallback: false),
-                    Type = _mem.ReadUInt(itemPtr + typeOff),
-                    Distance = _mem.ReadFloat(itemPtr + distOff),
-                    X = _mem.ReadFloat(itemPtr + xOff),
-                    Y = _mem.ReadFloat(itemPtr + yOff),
-                    Z = _mem.ReadFloat(itemPtr + zOff)
+                    Type = typeOff > 0u ? _mem.ReadUInt(unchecked(itemPtr + typeOff)) : 0u,
+                    Distance = distOff > 0u ? _mem.ReadFloat(unchecked(itemPtr + distOff)) : 0f,
+                    X = xOff > 0u ? _mem.ReadFloat(unchecked(itemPtr + xOff)) : 0f,
+                    Y = yOff > 0u ? _mem.ReadFloat(unchecked(itemPtr + yOff)) : 0f,
+                    Z = zOff > 0u ? _mem.ReadFloat(unchecked(itemPtr + zOff)) : 0f
                 });
             }
 

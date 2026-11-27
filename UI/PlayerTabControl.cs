@@ -7,91 +7,250 @@ namespace Full_Bot
     public class PlayerTabControl : UserControl
     {
         public PlayerSession Session { get; }
+        public BotEngine Engine { get; }
 
         private Label _lblSummary;
+        private CheckBox _chkBotEnabled;
+
+        private Button _btnModeSoloCultivo;
+        private Button _btnModeGrupoCultivo;
+        private Button _btnModeFarme;
+        private Button _btnModeColetaMatts;
+
+        private Button _btnCfgBatalhaSolo;
+        private Button _btnCfgBatalhaGrupo;
+        private Button _btnCfgRotasMatts;
+        private Button _btnCfgAutoCultivo;
+        private Button _btnCfgGeral;
+
         private Button _btnQuests;
         private Button _btnOnlineFriends;
         private Button _btnPartyMembers;
-        // [TEMP_TEST_FORM] Remover/comentar quando terminar os testes
-        private Button _btnTestFunctions;
+
+        private bool _syncingUi;
 
         public PlayerTabControl(PlayerSession session)
         {
             Session = session ?? throw new ArgumentNullException(nameof(session));
+            Engine = new BotEngine(Session);
+            Engine.EnabledChanged += OnEngineEnabledChanged;
+            Engine.ModeChanged += OnEngineModeChanged;
+
             Dock = DockStyle.Fill;
             BuildUi();
+            SyncModeButtons();
             RefreshView();
         }
 
         private void BuildUi()
         {
-            Padding = new Padding(16);
+            Padding = new Padding(12);
+
+            var rootLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 5
+            };
+            rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            // Linha 0: Resumo do player + Check Ativar/Desativar Bot
+            var topBar = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                WrapContents = true,
+                Margin = new Padding(0, 0, 0, 6)
+            };
+
+            _chkBotEnabled = new CheckBox
+            {
+                Text = "Ativar Bot",
+                AutoSize = true,
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                Margin = new Padding(0, 4, 16, 4)
+            };
+            _chkBotEnabled.CheckedChanged += (s, e) =>
+            {
+                if (_syncingUi) return;
+                Engine.SetEnabled(_chkBotEnabled.Checked);
+            };
 
             _lblSummary = new Label
             {
-                Location = new Point(16, 16),
-                Size = new Size(680, 28),
+                AutoSize = true,
                 Font = new Font("Segoe UI", 10f, FontStyle.Bold),
-                Text = "Carregando personagem..."
+                Text = "Carregando personagem...",
+                Margin = new Padding(0, 3, 0, 4)
+            };
+
+            topBar.Controls.AddRange(new Control[] { _chkBotEnabled, _lblSummary });
+
+            // Linha 1: Seleção de Modo
+            var modeBar = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                WrapContents = true,
+                Margin = new Padding(0, 0, 0, 6)
+            };
+
+            _btnModeSoloCultivo = CreateModeButton("Auto Cultivo Solo", BotMode.AutoCultivoSolo);
+            _btnModeGrupoCultivo = CreateModeButton("Auto Cultivo em Grupo", BotMode.AutoCultivoGrupo);
+            _btnModeFarme = CreateModeButton("Auto Farme", BotMode.AutoFarme);
+            _btnModeColetaMatts = CreateModeButton("Auto Coleta Matts", BotMode.AutoColetaMatts);
+
+            modeBar.Controls.AddRange(new Control[]
+            {
+                _btnModeSoloCultivo,
+                _btnModeGrupoCultivo,
+                _btnModeFarme,
+                _btnModeColetaMatts
+            });
+
+            // Linha 2: Botões de Configuração
+            var configBar = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                WrapContents = true,
+                Margin = new Padding(0, 0, 0, 8)
+            };
+
+            _btnCfgBatalhaSolo = CreateConfigButton("Conf Batalha Solo", BotConfigWindow.BatalhaSolo);
+            _btnCfgBatalhaGrupo = CreateConfigButton("Conf Batalha Grupo", BotConfigWindow.BatalhaGrupo);
+            _btnCfgRotasMatts = CreateConfigButton("Config Rotas Matts", BotConfigWindow.RotasMatts);
+            _btnCfgAutoCultivo = CreateConfigButton("Config Auto Cultivo", BotConfigWindow.AutoCultivo);
+            _btnCfgGeral = CreateConfigButton("Conf Geral", BotConfigWindow.Geral);
+
+            configBar.Controls.AddRange(new Control[]
+            {
+                _btnCfgBatalhaSolo,
+                _btnCfgBatalhaGrupo,
+                _btnCfgRotasMatts,
+                _btnCfgAutoCultivo,
+                _btnCfgGeral
+            });
+
+            // Linha 3: Utilitários da sessão (mantidos)
+            var utilBar = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                WrapContents = true,
+                Margin = new Padding(0, 0, 0, 6)
             };
 
             _btnQuests = new Button
             {
-                Location = new Point(16, 60),
-                Size = new Size(190, 34),
-                Text = "Quests (Visualização)"
+                Size = new Size(170, 30),
+                Text = "Quests (Visualização)",
+                Margin = new Padding(0, 0, 6, 4)
             };
             _btnQuests.Click += (s, e) => OpenQuestsForm();
 
             _btnOnlineFriends = new Button
             {
-                Location = new Point(216, 60),
-                Size = new Size(190, 34),
-                Text = "Amigos Online"
+                Size = new Size(150, 30),
+                Text = "Amigos Online",
+                Margin = new Padding(0, 0, 6, 4)
             };
             _btnOnlineFriends.Click += (s, e) => OpenFriendsForm();
 
             _btnPartyMembers = new Button
             {
-                Location = new Point(416, 60),
-                Size = new Size(190, 34),
+                Size = new Size(170, 30),
                 Text = "Membros da Party",
-                Enabled = false
+                Enabled = false,
+                Margin = new Padding(0, 0, 6, 4)
             };
             _btnPartyMembers.Click += (s, e) => OpenPartyForm();
 
-            // [TEMP_TEST_FORM] Botão temporário para abrir o form de teste das funções
-            _btnTestFunctions = new Button
+            utilBar.Controls.AddRange(new Control[]
             {
-                Location = new Point(616, 60),
-                Size = new Size(165, 34),
-                Text = "Testar Funções"
-            };
-            _btnTestFunctions.Click += (s, e) => OpenTestFunctionsForm();
-
-            Controls.AddRange(new Control[]
-            {
-                _lblSummary,
                 _btnQuests,
                 _btnOnlineFriends,
-                _btnPartyMembers,
-                // [TEMP_TEST_FORM]
-                _btnTestFunctions
+                _btnPartyMembers
             });
+
+            rootLayout.Controls.Add(topBar, 0, 0);
+            rootLayout.Controls.Add(modeBar, 0, 1);
+            rootLayout.Controls.Add(configBar, 0, 2);
+            rootLayout.Controls.Add(utilBar, 0, 3);
+            rootLayout.Controls.Add(new Panel { Dock = DockStyle.Fill }, 0, 4);
+
+            Controls.Add(rootLayout);
         }
 
-        // [TEMP_TEST_FORM] Remover/comentar quando terminar os testes
-        private void OpenTestFunctionsForm()
+        private Button CreateModeButton(string text, BotMode mode)
         {
-            var p = Session?.Player;
-            if (p == null)
+            var btn = new Button
             {
-                MessageBox.Show("PlayerCore não disponível na sessão atual.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                Text = text,
+                AutoSize = true,
+                Padding = new Padding(6, 3, 6, 3),
+                Margin = new Padding(0, 0, 6, 4)
+            };
+            btn.Click += (s, e) => Engine.SetMode(mode);
+            return btn;
+        }
+
+        private Button CreateConfigButton(string text, BotConfigWindow window)
+        {
+            var btn = new Button
+            {
+                Text = text,
+                AutoSize = true,
+                Padding = new Padding(6, 3, 6, 3),
+                Margin = new Padding(0, 0, 6, 4)
+            };
+            btn.Click += (s, e) => Engine.RequestConfigWindow(window);
+            return btn;
+        }
+
+        private void OnEngineEnabledChanged(bool enabled)
+        {
+            if (IsDisposed) return;
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action<bool>(OnEngineEnabledChanged), enabled);
                 return;
             }
 
-            var testFrm = new PlayerFunctionsTestForm(p);
-            testFrm.Show(this);
+            _syncingUi = true;
+            _chkBotEnabled.Checked = enabled;
+            _syncingUi = false;
+        }
+
+        private void OnEngineModeChanged(BotMode mode)
+        {
+            if (IsDisposed) return;
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action<BotMode>(OnEngineModeChanged), mode);
+                return;
+            }
+
+            SyncModeButtons();
+        }
+
+        private void SyncModeButtons()
+        {
+            SetModeButtonActive(_btnModeSoloCultivo, Engine.Mode == BotMode.AutoCultivoSolo);
+            SetModeButtonActive(_btnModeGrupoCultivo, Engine.Mode == BotMode.AutoCultivoGrupo);
+            SetModeButtonActive(_btnModeFarme, Engine.Mode == BotMode.AutoFarme);
+            SetModeButtonActive(_btnModeColetaMatts, Engine.Mode == BotMode.AutoColetaMatts);
+        }
+
+        private static void SetModeButtonActive(Button btn, bool active)
+        {
+            btn.BackColor = active ? Color.SteelBlue : SystemColors.Control;
+            btn.ForeColor = active ? Color.White : SystemColors.ControlText;
+            btn.Font = new Font(btn.Font, active ? FontStyle.Bold : FontStyle.Regular);
         }
 
         public void RefreshView()
